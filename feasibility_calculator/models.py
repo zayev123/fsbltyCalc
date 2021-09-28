@@ -184,22 +184,26 @@ class EventSchedule(models.Model):
             setEndDate(self)
         super(EventSchedule, self).save()
 
-    def delete(self):
+    def delete(self, *args, **kwargs):
+        qdel_check = False
+        if args and args[0]==True:
+            qdel_check = True
+        if not qdel_check:
         # if related field, then also get all its related fields using filter or related name and delete those aswell
-        if hasattr(self, 'next_related_events') and list(self.next_related_events.all()):
-            next_events = self.next_related_events.all()
-            for next_event in next_events:
-                nextin_prevy_events = next_event.previous_related_events.all()
-                if nextin_prevy_events[0].id == self.id:
-                    next_event.event_start_date = nextin_prevy_events[1].event_end_date
-                    next_event.latest_previous_dependent_event = str(nextin_prevy_events[1])
-                    setEndDate(next_event)
-                    next_event.save()
-                    # yeah obviously, its not calling it self as in the delete function
-                    # so no recusrsion as such
-        myTechnology = self.technology
-        myTechnology.total_start_up_cost_Rs = myTechnology.total_start_up_cost_Rs - self.event_cost_Rs
-        myTechnology.save()
+            if hasattr(self, 'next_related_events') and list(self.next_related_events.all()):
+                next_events = self.next_related_events.all()
+                for next_event in next_events:
+                    nextin_prevy_events = next_event.previous_related_events.all()
+                    if nextin_prevy_events[0].id == self.id:
+                        next_event.event_start_date = nextin_prevy_events[1].event_end_date
+                        next_event.latest_previous_dependent_event = str(nextin_prevy_events[1])
+                        setEndDate(next_event)
+                        next_event.save()
+                        # yeah obviously, its not calling it self as in the delete function
+                        # so no recusrsion as such
+            myTechnology = self.technology
+            myTechnology.total_start_up_cost_Rs = myTechnology.total_start_up_cost_Rs - self.event_cost_Rs
+            myTechnology.save()
         super(EventSchedule, self).delete()
 
     class Meta:
@@ -306,11 +310,20 @@ class Equipment(models.Model):
         # else, the id is retreived, and it is managed during presave
         super(Equipment, self).save()
 
-    def delete(self):
-        myTechnology = self.technology
-        myTechnology.total_size_required_m2 = myTechnology.total_size_required_m2  - self.total_area_required_for_all_units_m2
-        myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs - self.total_running_cost_per_hour_Rs
-        myTechnology.save()
+    def delete(self, *args, **kwargs):
+        qdel_check = False
+        if args and args[0]==True:
+            qdel_check = True
+        if not qdel_check:
+            myTechnology = self.technology
+            myTechnology.total_size_required_m2 = myTechnology.total_size_required_m2  - self.total_area_required_for_all_units_m2
+            myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs - self.total_running_cost_per_hour_Rs
+            myTechnology.save()
+            if hasattr(self, 'production_sections') and list(self.production_sections.all()):
+                productionSections = list(self.production_sections.all())
+                for productionSection in productionSections:
+                    productionSection.equipment_model_used = None
+                    productionSection.save()
         super(Equipment, self).delete()
 
     def __str__(self):
@@ -348,11 +361,16 @@ class Equipment_Maintenance_Cost(models.Model):
         # else, the id is retreived, and it is managed during presave
         super(Equipment_Maintenance_Cost, self).save()
 
-    def delete(self):
-        myEquipment = self.equipment
-        myEquipment.parts_replacement_cost_per_equipmentUnit_per_hour_Rs = myEquipment.parts_replacement_cost_per_equipmentUnit_per_hour_Rs  - self.part_replacement_cost_per_unit_per_hour_Rs
-        myEquipment.maintenance_down_time_fractions_per_equipmentUnit_per_hour = myEquipment.maintenance_down_time_fractions_per_equipmentUnit_per_hour - self.maintenance_downTime_fraction_per_unit_per_hour
-        myEquipment.save()
+    def delete(self, *args, **kwargs):
+        qdel_check = False
+        if args and args[0]==True:
+            qdel_check = True
+        if not qdel_check:
+            print('yo')
+            myEquipment = self.equipment
+            myEquipment.parts_replacement_cost_per_equipmentUnit_per_hour_Rs = myEquipment.parts_replacement_cost_per_equipmentUnit_per_hour_Rs  - self.part_replacement_cost_per_unit_per_hour_Rs
+            myEquipment.maintenance_down_time_fractions_per_equipmentUnit_per_hour = myEquipment.maintenance_down_time_fractions_per_equipmentUnit_per_hour - self.maintenance_downTime_fraction_per_unit_per_hour
+            myEquipment.save()
         super(Equipment_Maintenance_Cost, self).delete()
 
     def __str__(self):
@@ -391,10 +409,14 @@ class Equipment_Resource_Cost(models.Model):
         # else, the id is retreived, and it is managed during presave
         super(Equipment_Resource_Cost, self).save()
 
-    def delete(self):
-        myEquipment = self.equipment
-        myEquipment.resources_cost_per_equipmentUnit_per_hour_Rs = myEquipment.resources_cost_per_equipmentUnit_per_hour_Rs  - self.cost_per_equipmentUnit_per_hour_for_this_resource_Rs
-        myEquipment.save()
+    def delete(self, *args, **kwargs):
+        qdel_check = False
+        if args and args[0]==True:
+            qdel_check = True
+        if not qdel_check:
+            myEquipment = self.equipment
+            myEquipment.resources_cost_per_equipmentUnit_per_hour_Rs = myEquipment.resources_cost_per_equipmentUnit_per_hour_Rs  - self.cost_per_equipmentUnit_per_hour_for_this_resource_Rs
+            myEquipment.save()
         super(Equipment_Resource_Cost, self).delete()
 
     def __str__(self):
@@ -437,10 +459,19 @@ class Labour_PlantOperatingCost(models.Model):
         # else, the id is retreived, and it is managed during presave
         super(Labour_PlantOperatingCost, self).save()
 
-    def delete(self):
-        myTechnology = self.technology
-        myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs - self.total_labourCost_per_hour_Rs
-        myTechnology.save()
+    def delete(self, *args, **kwargs):
+        qdel_check = False
+        if args and args[0]==True:
+            qdel_check = True
+        if not qdel_check:
+            myTechnology = self.technology
+            myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs - self.total_labourCost_per_hour_Rs
+            myTechnology.save()
+            if hasattr(self, 'production_sections') and list(self.production_sections.all()):
+                productionSections = list(self.production_sections.all())
+                for productionSection in productionSections:
+                    productionSection.labour_role_needed = None
+                    productionSection.save()
         super(Labour_PlantOperatingCost, self).delete()
 
     def __str__(self):
@@ -473,10 +504,14 @@ class Miscellaneous_PlantOperatingCost(models.Model):
         # else, the id is retreived, and it is managed during presave
         super(Miscellaneous_PlantOperatingCost, self).save()
 
-    def delete(self):
-        myTechnology = self.technology
-        myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs  - self.per_hour_cost_Rs
-        myTechnology.save()
+    def delete(self, *args, **kwargs):
+        qdel_check = False
+        if args and args[0]==True:
+            qdel_check = True
+        if not qdel_check:
+            myTechnology = self.technology
+            myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs  - self.per_hour_cost_Rs
+            myTechnology.save()
         super(Miscellaneous_PlantOperatingCost, self).delete()
 
     def __str__(self):
@@ -520,10 +555,14 @@ class Miscellaneous_PlantInstallationCost(models.Model):
         # else, the id is retreived, and it is managed during presave
         super(Miscellaneous_PlantInstallationCost, self).save()
 
-    def delete(self):
-        myTechnology = self.technology
-        myTechnology.total_start_up_cost_Rs = myTechnology.total_start_up_cost_Rs  - self.cost_Rs
-        myTechnology.save()
+    def delete(self, *args, **kwargs):
+        qdel_check = False
+        if args and args[0]==True:
+            qdel_check = True
+        if not qdel_check:
+            myTechnology = self.technology
+            myTechnology.total_start_up_cost_Rs = myTechnology.total_start_up_cost_Rs  - self.cost_Rs
+            myTechnology.save()
         super(Miscellaneous_PlantInstallationCost, self).delete()
 
     def __str__(self):
@@ -566,10 +605,14 @@ class Miscellaneous_Area_Requirement(models.Model):
         # else, the id is retreived, and it is managed during presave
         super(Miscellaneous_Area_Requirement, self).save()
 
-    def delete(self):
-        myTechnology = self.technology
-        myTechnology.total_size_required_m2 = myTechnology.total_size_required_m2  - self.area_allotment_m2
-        myTechnology.save()
+    def delete(self, *args, **kwargs):
+        qdel_check = False
+        if args and args[0]==True:
+            qdel_check = True
+        if not qdel_check:
+            myTechnology = self.technology
+            myTechnology.total_size_required_m2 = myTechnology.total_size_required_m2  - self.area_allotment_m2
+            myTechnology.save()
         super(Miscellaneous_Area_Requirement, self).delete()
 
     def __str__(self):
@@ -602,10 +645,10 @@ def preSaveMsclArea(sender, instance, **kwargs):
 # elif techno and not labour, follow techno
 # else fif techno not none, follow techno
 class Section_Production_Rate(models.Model):
-    equipment_model_used = models.ForeignKey(Equipment, related_name='production_sections', on_delete=models.CASCADE, blank=True, null=True)
+    equipment_model_used = models.ForeignKey(Equipment, related_name='production_sections', on_delete=models.DO_NOTHING, blank=True, null=True)
     # this is just for information purposes, and will be handled manually
     # it would be better if there is a ui for it though
-    labour_role_needed = models.ForeignKey(Labour_PlantOperatingCost, related_name='production_sections', on_delete=models.CASCADE, blank=True, null=True)
+    labour_role_needed = models.ForeignKey(Labour_PlantOperatingCost, related_name='production_sections', on_delete=models.DO_NOTHING, blank=True, null=True)
     product_name = models.CharField(max_length=100)
     product_measurement_unit = models.CharField(max_length=100, default='Units')
     # only handle save, if this below value is saved
@@ -637,17 +680,21 @@ class Section_Production_Rate(models.Model):
         # else, the id is retreived, and it is managed during presave
         super(Section_Production_Rate, self).save()
     
-    def delete(self):
-        if self.equipment_model_used != None:
-            myTechnology = self.equipment_model_used.technology
-        elif self.labour_role_needed != None:
-            myTechnology = self.labour_role_needed.technology
-        else:
-            myTechnology = None
-                
-        if myTechnology != None:
-            myTechnology.total_revenue_per_hour_Rs = myTechnology.total_revenue_per_hour_Rs  - self.total_hourly_revenue_generated_for_this_section_Rs
-            myTechnology.save()
+    def delete(self, *args, **kwargs):
+        qdel_check = False
+        if args and args[0]==True:
+            qdel_check = True
+        if not qdel_check:
+            if self.equipment_model_used != None:
+                myTechnology = self.equipment_model_used.technology
+            elif self.labour_role_needed != None:
+                myTechnology = self.labour_role_needed.technology
+            else:
+                myTechnology = None
+                    
+            if myTechnology != None:
+                myTechnology.total_revenue_per_hour_Rs = myTechnology.total_revenue_per_hour_Rs  - self.total_hourly_revenue_generated_for_this_section_Rs
+                myTechnology.save()
         super(Section_Production_Rate, self).delete()
 
     def __str__(self):
