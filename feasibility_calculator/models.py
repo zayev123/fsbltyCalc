@@ -119,7 +119,7 @@ class AvailableTechnology(models.Model):
             hours_to_break_even = self.total_start_up_cost_Rs/self.profit_margins_per_hour_Rs
             days_to_break_even = hours_to_break_even/self.project.production_hours_per_day
             self.break_even_date = self.end_date + timedelta(days=days_to_break_even)
-        super(AvailableTechnology, self).save()
+        super(AvailableTechnology, self).save(False)
 
     class Meta:
         verbose_name_plural = "Available Technologies"
@@ -265,9 +265,6 @@ def preSaveEvent(sender, instance, **kwargs):
                 current_tech.total_start_up_cost_Rs = current_tech.total_start_up_cost_Rs - original_event.event_cost_Rs + changed_event.event_cost_Rs
                 current_tech.save()
 
-            
-
-
 def events_changed(sender, instance, action, **kwargs):
     if action == "post_add" or action == "post_remove":
         
@@ -276,12 +273,80 @@ def events_changed(sender, instance, action, **kwargs):
         selfEvent.save()
 
 m2m_changed.connect(events_changed, sender=EventSchedule.previous_related_events.through)
+            
+class Section_Production_Rate(models.Model):
+    technology = models.ForeignKey(AvailableTechnology, related_name='production_sections', on_delete=models.CASCADE, blank=True, null=True)
+    product_name = models.CharField(max_length=100)
+    product_measurement_unit = models.CharField(max_length=100, default='Units')
+    # only handle save, if this below value is saved
+    total_section_operating_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=14,decimal_places=4)
+    total_section_area_required_m2 = models.DecimalField(default=0, max_digits=14,decimal_places=4)
+    max_amount_of_section_product_produced_per_hour = models.DecimalField(default=0, max_digits=14,decimal_places=4)
+    entire_maintenance_fraction_per_hour = models.DecimalField(default=0, max_digits=6,decimal_places=4)
+    amount_of_section_product_missed_per_hour_for_maintenance = models.DecimalField(default=0, max_digits=12,decimal_places=4)
+    net_amount_of_product_produced_per_hour = models.DecimalField(default=0, max_digits=14,decimal_places=4)
+    selling_price_per_unit_of_product_Rs = models.DecimalField(default=0, max_digits=8,decimal_places=2)
+    total_hourly_revenue_generated_for_this_section_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
+    remarks = models.TextField(blank=True, null=True,)
+    reference = models.FileField(upload_to='research_papers', blank=True, null=True, storage=OverwriteStorage())
+
+    def save(self, *args, **kwargs):
+        self.amount_of_section_product_missed_per_hour_for_maintenance = self.max_amount_of_section_product_produced_per_hour * self.entire_maintenance_fraction_per_hour
+        self.net_amount_of_product_produced_per_hour = self.max_amount_of_section_product_produced_per_hour - self.amount_of_section_product_missed_per_hour_for_maintenance
+        self.total_hourly_revenue_generated_for_this_section_Rs = self.selling_price_per_unit_of_product_Rs * self.net_amount_of_product_produced_per_hour
+        if self.id == None:
+            new_tech = self.technology
+            new_tech.total_revenue_per_hour_Rs = new_tech.total_revenue_per_hour_Rs  + self.total_hourly_revenue_generated_for_this_section_Rs
+            new_tech.save()
+        # else, the id is retreived, and it is managed during presave
+        super(Section_Production_Rate, self).save()
+    
+    def delete(self, *args, **kwargs):
+        qdel_check = False
+        if args and args[0]==True:
+            qdel_check = True
+        if not qdel_check:   
+            myTechnology = self.technology
+            myTechnology.total_revenue_per_hour_Rs = myTechnology.total_revenue_per_hour_Rs  - self.total_hourly_revenue_generated_for_this_section_Rs
+            myTechnology.save()
+            if hasattr(self, 'equipments') and list(self.equipments.all()):
+                equipments = list(self.equipments.all())
+                for equipment in equipments:
+                    equipment.equiProductionSection = None
+                    equipment.save
+            if hasattr(self, 'labours') and list(self.labours.all()):
+                labours = list(self.labours.all())
+                for labour in labours:
+                    labour.laboProductionSection = None
+                    labour.save()
+        super(Section_Production_Rate, self).delete()
+
+    def __str__(self):
+        return 'ID: ' + str(self.id) + ', PRODUCT: ' + self.product_name + ', PRODUCTION / HOUR: ' + str(self.net_amount_of_product_produced_per_hour) + ' ' + self.product_measurement_unit
+
+# maintenance will only be done if equipment is used, and that is:
+# the only data that comes from outside, so i donot need to add a foreign key
+# to labour
+@receiver(pre_save, sender=Section_Production_Rate)
+def preSaveProduction(sender, instance, **kwargs):
+    try:
+        original_section_prdtn = sender.objects.get(pk=instance.pk)
+        changed_section_prdtn = instance
+        current_tech = original_section_prdtn.technology
+    except sender.DoesNotExist:
+        pass
+    else:
+        if hasattr(changed_section_prdtn, 'maintenance_changed') and changed_section_prdtn.maintenance_changed:
+            pass
+        else:
+            manage_presave_production(original_section_prdtn, changed_section_prdtn, current_tech)
 
 
 
 
 class Equipment(models.Model):
-    technology = models.ForeignKey(AvailableTechnology, related_name='equipment_operating_costs', on_delete=models.CASCADE)
+    technology = models.ForeignKey(AvailableTechnology, related_name='equipments', on_delete=models.CASCADE)
+    equiProductionSection = models.ForeignKey(Section_Production_Rate, related_name='equipments', on_delete=models.DO_NOTHING, blank=True, null=True)
     equipment_name = models.CharField(max_length=100)
     number_of_equipment_units_needed = models.DecimalField(default=0, max_digits=12,decimal_places=2)
     total_area_required_for_all_units_m2 = models.DecimalField(default=0, max_digits=8,decimal_places=2)
@@ -304,7 +369,14 @@ class Equipment(models.Model):
         self.total_maintenance_down_time_fractions_per_hour = self.number_of_equipment_units_needed * self.maintenance_down_time_fractions_per_equipmentUnit_per_hour
         self.total_running_cost_per_hour_Rs = self.total_parts_replacement_cost_per_hour_Rs + self.total_resources_cost_per_hour_Rs
         if self.id == None:
+            myequiProductionSection = self.equiProductionSection
             myTechnology = self.technology
+            if myequiProductionSection != None:
+                myequiProductionSection.total_section_operating_cost_per_hour_Rs = myequiProductionSection.total_section_operating_cost_per_hour_Rs + self.total_running_cost_per_hour_Rs
+                myequiProductionSection.total_section_area_required_m2 = myequiProductionSection.total_section_area_required_m2 + self.total_area_required_for_all_units_m2
+                myequiProductionSection.entire_maintenance_fraction_per_hour = myequiProductionSection.entire_maintenance_fraction_per_hour + self.total_maintenance_down_time_fractions_per_hour
+                myequiProductionSection.save() 
+            myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs + self.total_running_cost_per_hour_Rs
             myTechnology.total_size_required_m2 = myTechnology.total_size_required_m2  + self.total_area_required_for_all_units_m2
             myTechnology.save()
         # else, the id is retreived, and it is managed during presave
@@ -315,15 +387,22 @@ class Equipment(models.Model):
         if args and args[0]==True:
             qdel_check = True
         if not qdel_check:
+            myequiProductionSection = self.equiProductionSection
             myTechnology = self.technology
+            print('yo')
+            if myequiProductionSection != None:
+                old_net_revenue = myequiProductionSection.total_hourly_revenue_generated_for_this_section_Rs
+                print(old_net_revenue)
+                myequiProductionSection.total_section_operating_cost_per_hour_Rs = myequiProductionSection.total_section_operating_cost_per_hour_Rs - self.total_running_cost_per_hour_Rs
+                myequiProductionSection.total_section_area_required_m2 = myequiProductionSection.total_section_area_required_m2 - self.total_area_required_for_all_units_m2
+                myequiProductionSection.entire_maintenance_fraction_per_hour = myequiProductionSection.entire_maintenance_fraction_per_hour - self.total_maintenance_down_time_fractions_per_hour
+                myequiProductionSection.save()
+                new_net_revenue = myequiProductionSection.total_hourly_revenue_generated_for_this_section_Rs
+                print(new_net_revenue)
+            myTechnology.total_revenue_per_hour_Rs = myTechnology.total_revenue_per_hour_Rs - old_net_revenue + new_net_revenue
             myTechnology.total_size_required_m2 = myTechnology.total_size_required_m2  - self.total_area_required_for_all_units_m2
             myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs - self.total_running_cost_per_hour_Rs
             myTechnology.save()
-            if hasattr(self, 'production_sections') and list(self.production_sections.all()):
-                productionSections = list(self.production_sections.all())
-                for productionSection in productionSections:
-                    productionSection.equipment_model_used = None
-                    productionSection.save()
         super(Equipment, self).delete()
 
     def __str__(self):
@@ -335,11 +414,12 @@ def preSaveEquipment(sender, instance, **kwargs):
         original_equipment = sender.objects.get(pk=instance.pk)
         changed_equipment = instance
         current_tech = original_equipment.technology
+        current_secProd = original_equipment.equiProductionSection
     except sender.DoesNotExist:
         pass
     else:
         # first_check if any of the costs changed
-        manage_presave_equipment(original_equipment, changed_equipment, current_tech)
+        manage_presave_equipment(original_equipment, changed_equipment, current_tech, current_secProd)
             
 # the reason why im not adding a calculation for it, is because
 # the way i calculate it may change every time
@@ -366,7 +446,6 @@ class Equipment_Maintenance_Cost(models.Model):
         if args and args[0]==True:
             qdel_check = True
         if not qdel_check:
-            print('yo')
             myEquipment = self.equipment
             myEquipment.parts_replacement_cost_per_equipmentUnit_per_hour_Rs = myEquipment.parts_replacement_cost_per_equipmentUnit_per_hour_Rs  - self.part_replacement_cost_per_unit_per_hour_Rs
             myEquipment.maintenance_down_time_fractions_per_equipmentUnit_per_hour = myEquipment.maintenance_down_time_fractions_per_equipmentUnit_per_hour - self.maintenance_downTime_fraction_per_unit_per_hour
@@ -442,6 +521,7 @@ def preSaveEquiResource(sender, instance, **kwargs):
 
 class Labour_PlantOperatingCost(models.Model):
     technology = models.ForeignKey(AvailableTechnology, related_name='labour_operating_costs', on_delete=models.CASCADE)
+    laboProductionSection = models.ForeignKey(Section_Production_Rate, related_name='labours', on_delete=models.DO_NOTHING, blank=True, null=True)
     role = models.CharField(max_length=300)
     number_of_labourers_required_for_this_role = models.DecimalField(default=0, max_digits=8,decimal_places=2)
     salary_per_hour_per_labourer_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
@@ -453,8 +533,12 @@ class Labour_PlantOperatingCost(models.Model):
     def save(self, *args, **kwargs):
         self.total_labourCost_per_hour_Rs = self.number_of_labourers_required_for_this_role * (self.salary_per_hour_per_labourer_Rs + self.safety_risk_cost_per_hour_per_labourer_Rs)
         if self.id == None:
+            laboProductionSection = self.equiProductionSection
             myTechnology = self.technology
-            myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs  + self.total_labourCost_per_hour_Rs
+            if laboProductionSection != None:
+                laboProductionSection.total_section_operating_cost_per_hour_Rs = laboProductionSection.total_section_operating_cost_per_hour_Rs + self.total_labourCost_per_hour_Rs
+                laboProductionSection.save() 
+            myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs + self.total_labourCost_per_hour_Rs
             myTechnology.save()
         # else, the id is retreived, and it is managed during presave
         super(Labour_PlantOperatingCost, self).save()
@@ -464,14 +548,13 @@ class Labour_PlantOperatingCost(models.Model):
         if args and args[0]==True:
             qdel_check = True
         if not qdel_check:
+            laboProductionSection = self.equiProductionSection
             myTechnology = self.technology
+            if laboProductionSection != None:
+                laboProductionSection.total_section_operating_cost_per_hour_Rs = laboProductionSection.total_section_operating_cost_per_hour_Rs - self.total_labourCost_per_hour_Rs
+                laboProductionSection.save()
             myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs - self.total_labourCost_per_hour_Rs
             myTechnology.save()
-            if hasattr(self, 'production_sections') and list(self.production_sections.all()):
-                productionSections = list(self.production_sections.all())
-                for productionSection in productionSections:
-                    productionSection.labour_role_needed = None
-                    productionSection.save()
         super(Labour_PlantOperatingCost, self).delete()
 
     def __str__(self):
@@ -483,11 +566,12 @@ def preSaveLabour(sender, instance, **kwargs):
         original_labour = sender.objects.get(pk=instance.pk)
         changed_labour = instance
         current_tech = original_labour.technology
+        current_secProd = original_labour.equiProductionSection
     except sender.DoesNotExist:
         pass
     else:
         # first_check if any of the costs changed
-        manage_presave_labour(original_labour, changed_labour, current_tech)
+        manage_presave_labour(original_labour, changed_labour, current_tech, current_secProd)
 
 class Miscellaneous_PlantOperatingCost(models.Model):
     miscellaneous_operation_name = models.CharField(max_length=100)
@@ -644,76 +728,3 @@ def preSaveMsclArea(sender, instance, **kwargs):
 # if labour and not techno, follow labour
 # elif techno and not labour, follow techno
 # else fif techno not none, follow techno
-class Section_Production_Rate(models.Model):
-    equipment_model_used = models.ForeignKey(Equipment, related_name='production_sections', on_delete=models.DO_NOTHING, blank=True, null=True)
-    # this is just for information purposes, and will be handled manually
-    # it would be better if there is a ui for it though
-    labour_role_needed = models.ForeignKey(Labour_PlantOperatingCost, related_name='production_sections', on_delete=models.DO_NOTHING, blank=True, null=True)
-    product_name = models.CharField(max_length=100)
-    product_measurement_unit = models.CharField(max_length=100, default='Units')
-    # only handle save, if this below value is saved
-    max_amount_of_section_product_produced_per_hour = models.DecimalField(default=0, max_digits=14,decimal_places=4)
-    amount_of_section_product_missed_per_hour_for_maintenance = models.DecimalField(default=0, max_digits=12,decimal_places=4)
-    net_amount_of_product_produced_per_hour = models.DecimalField(default=0, max_digits=14,decimal_places=4)
-    selling_price_per_unit_of_product_Rs = models.DecimalField(default=0, max_digits=8,decimal_places=2)
-    total_hourly_revenue_generated_for_this_section_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
-    remarks = models.TextField(blank=True, null=True,)
-    reference = models.FileField(upload_to='research_papers', blank=True, null=True, storage=OverwriteStorage())
-
-    def save(self, *args, **kwargs):
-        if hasattr(self, 'maintenance_changed') and self.maintenance_changed:
-            pass
-        else:
-            if self.equipment_model_used != None:
-                self.amount_of_section_product_missed_per_hour_for_maintenance = self.equipment_model_used.total_maintenance_down_time_fractions_per_hour * self.max_amount_of_section_product_produced_per_hour
-            self.net_amount_of_product_produced_per_hour = self.max_amount_of_section_product_produced_per_hour - self.amount_of_section_product_missed_per_hour_for_maintenance
-            self.total_hourly_revenue_generated_for_this_section_Rs = self.selling_price_per_unit_of_product_Rs * self.net_amount_of_product_produced_per_hour
-            if self.id == None:
-                if self.equipment_model_used != None:
-                    new_tech = self.equipment_model_used.technology
-                    new_tech.total_revenue_per_hour_Rs = new_tech.total_revenue_per_hour_Rs  + self.total_hourly_revenue_generated_for_this_section_Rs
-                    new_tech.save()
-                elif self.labour_role_needed != None:
-                    new_tech = self.labour_role_needed.technology
-                    new_tech.total_revenue_per_hour_Rs = new_tech.total_revenue_per_hour_Rs  + self.total_hourly_revenue_generated_for_this_section_Rs
-                    new_tech.save()
-        # else, the id is retreived, and it is managed during presave
-        super(Section_Production_Rate, self).save()
-    
-    def delete(self, *args, **kwargs):
-        qdel_check = False
-        if args and args[0]==True:
-            qdel_check = True
-        if not qdel_check:
-            if self.equipment_model_used != None:
-                myTechnology = self.equipment_model_used.technology
-            elif self.labour_role_needed != None:
-                myTechnology = self.labour_role_needed.technology
-            else:
-                myTechnology = None
-                    
-            if myTechnology != None:
-                myTechnology.total_revenue_per_hour_Rs = myTechnology.total_revenue_per_hour_Rs  - self.total_hourly_revenue_generated_for_this_section_Rs
-                myTechnology.save()
-        super(Section_Production_Rate, self).delete()
-
-    def __str__(self):
-        return 'ID: ' + str(self.id) + ', PRODUCT: ' + self.product_name + ', PRODUCTION / HOUR: ' + str(self.net_amount_of_product_produced_per_hour) + ' ' + self.product_measurement_unit
-
-# maintenance will only be done if equipment is used, and that is:
-# the only data that comes from outside, so i donot need to add a foreign key
-# to labour
-@receiver(pre_save, sender=Section_Production_Rate)
-def preSaveProduction(sender, instance, **kwargs):
-    try:
-        original_section_prdtn = sender.objects.get(pk=instance.pk)
-        changed_section_prdtn = instance
-        current_equip = original_section_prdtn.equipment_model_used
-        current_labour = original_section_prdtn.labour_role_needed
-    except sender.DoesNotExist:
-        pass
-    else:
-        if hasattr(changed_section_prdtn, 'maintenance_changed') and changed_section_prdtn.maintenance_changed:
-            pass
-        else:
-            manage_presave_production(original_section_prdtn, changed_section_prdtn, current_equip, current_labour)

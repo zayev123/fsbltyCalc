@@ -29,7 +29,7 @@ class ProjectAdmin(admin.ModelAdmin):
 @admin.register(AvailableTechnology)
 class AvailableTechnologyAdmin(admin.ModelAdmin):
     list_display = ['technology_name', 'project', 'total_start_up_cost_Rs', 'total_operating_cost_per_hour_Rs', 'total_revenue_per_hour_Rs', 'profit_margins_per_hour_Rs', 'total_size_required_m2', 'start_date', 'end_date', 'break_even_date']
-    readonly_fields=['total_start_up_cost_Rs', 'total_operating_cost_per_hour_Rs', 'total_revenue_per_hour_Rs', 'profit_margins_per_hour_Rs', 'total_size_required_m2', 'break_even_date']
+    readonly_fields=['total_start_up_cost_Rs', 'total_operating_cost_per_hour_Rs', 'profit_margins_per_hour_Rs', 'total_size_required_m2', 'break_even_date']
 
 
 # it doesnt get its parent field in query delete
@@ -63,6 +63,31 @@ class EventScheduleAdmin(admin.ModelAdmin):
             myTechnology.save()
             myEvent.delete(True)
 
+
+@admin.register(Section_Production_Rate)
+class Section_Production_RateAdmin(admin.ModelAdmin):
+    list_display = ['id', 'product_name', 'net_amount_of_product_produced_per_hour', 'total_hourly_revenue_generated_for_this_section_Rs']
+    readonly_fields=['total_section_area_required_m2', 'total_section_operating_cost_per_hour_Rs', 'entire_maintenance_fraction_per_hour', 'amount_of_section_product_missed_per_hour_for_maintenance', 'net_amount_of_product_produced_per_hour', 'total_hourly_revenue_generated_for_this_section_Rs']
+
+    actions = ['delete_selected']
+
+    def delete_queryset(self, request, queryset):
+        for myPrdctn in queryset:
+            myTechnology = AvailableTechnology.objects.get(id = myPrdctn.technology.id)
+            myTechnology.total_revenue_per_hour_Rs = myTechnology.total_revenue_per_hour_Rs  - myPrdctn.total_hourly_revenue_generated_for_this_section_Rs
+            myTechnology.save()
+            if hasattr(myPrdctn, 'equipments') and list(myPrdctn.equipments.all()):
+                equipments = list(myPrdctn.equipments.all())
+                for equipment in equipments:
+                    equipment.equiProductionSection = None
+                    equipment.save
+            if hasattr(myPrdctn, 'labours') and list(myPrdctn.labours.all()):
+                labours = list(myPrdctn.labours.all())
+                for labour in labours:
+                    labour.laboProductionSection = None
+                    labour.save()
+            myPrdctn.delete(True)
+
 @admin.register(Equipment)
 class EquipmentAdmin(admin.ModelAdmin):
     list_display = ['equipment_name', 'technology', 'number_of_equipment_units_needed', 'total_area_required_for_all_units_m2', 'total_running_cost_per_hour_Rs']
@@ -73,16 +98,23 @@ class EquipmentAdmin(admin.ModelAdmin):
 
     def delete_queryset(self, request, queryset):
         for myEquipment in queryset:
+            myequiProductionSection = myEquipment.equiProductionSection 
             myTechnology = AvailableTechnology.objects.get(id = myEquipment.technology.id)
+            print('yo')
+            if myequiProductionSection != None:
+                old_net_revenue = myequiProductionSection.total_hourly_revenue_generated_for_this_section_Rs
+                print(old_net_revenue)
+                myequiProductionSectiond = Section_Production_Rate.objects.get(id = myequiProductionSection.id)
+                myequiProductionSectiond.total_section_operating_cost_per_hour_Rs = myequiProductionSectiond.total_section_operating_cost_per_hour_Rs - myEquipment.total_running_cost_per_hour_Rs
+                myequiProductionSectiond.total_section_area_required_m2 = myequiProductionSectiond.total_section_area_required_m2 - myEquipment.total_area_required_for_all_units_m2
+                myequiProductionSectiond.entire_maintenance_fraction_per_hour = myequiProductionSectiond.entire_maintenance_fraction_per_hour - myEquipment.total_maintenance_down_time_fractions_per_hour
+                myequiProductionSectiond.save()
+                new_net_revenue = myequiProductionSection.total_hourly_revenue_generated_for_this_section_Rs
+                print(new_net_revenue)
+            myTechnology.total_revenue_per_hour_Rs = myTechnology.total_revenue_per_hour_Rs - old_net_revenue + new_net_revenue
             myTechnology.total_size_required_m2 = myTechnology.total_size_required_m2  - myEquipment.total_area_required_for_all_units_m2
             myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs - myEquipment.total_running_cost_per_hour_Rs
             myTechnology.save()
-            # actually, dono delete any, just turn it all to none and save
-            if hasattr(myEquipment, 'production_sections') and list(myEquipment.production_sections.all()):
-                productionSections = list(myEquipment.production_sections.all())
-                for productionSection in productionSections:
-                    productionSection.equipment_model_used = None
-                    productionSection.save()
             myEquipment.delete(True)
 
 @admin.register(Equipment_Maintenance_Cost)
@@ -122,14 +154,14 @@ class Labour_PlantOperatingCostAdmin(admin.ModelAdmin):
 
     def delete_queryset(self, request, queryset):
         for myLbOps in queryset:
+            laboProductionSection = myLbOps.laboProductionSection
             myTechnology = AvailableTechnology.objects.get(id = myLbOps.technology.id)
+            if laboProductionSection != None:
+                laboProductionSectiond = Section_Production_Rate.objects.get(id = laboProductionSection.id)
+                laboProductionSectiond.total_section_operating_cost_per_hour_Rs = laboProductionSectiond.total_section_operating_cost_per_hour_Rs - myLbOps.total_labourCost_per_hour_Rs
+                laboProductionSectiond.save()
             myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs - myLbOps.total_labourCost_per_hour_Rs
             myTechnology.save()
-            if hasattr(myLbOps, 'production_sections') and list(myLbOps.production_sections.all()):
-                productionSections = list(myLbOps.production_sections.all())
-                for productionSection in productionSections:
-                    productionSection.labour_role_needed = None
-                    productionSection.save()
             myLbOps.delete(True)
 
 @admin.register(Miscellaneous_PlantOperatingCost)
@@ -171,26 +203,6 @@ class Miscellaneous_Area_RequirementAdmin(admin.ModelAdmin):
             myTechnology.save()
             myMscArea.delete(True)
 
-@admin.register(Section_Production_Rate)
-class Section_Production_RateAdmin(admin.ModelAdmin):
-    list_display = ['id', 'total_hourly_revenue_generated_for_this_section_Rs', 'labour_role_needed', 'equipment_model_used']
-    readonly_fields=['amount_of_section_product_missed_per_hour_for_maintenance', 'net_amount_of_product_produced_per_hour', 'total_hourly_revenue_generated_for_this_section_Rs']
-
-    actions = ['delete_selected']
-
-    def delete_queryset(self, request, queryset):
-        for myPrdctn in queryset:
-            if myPrdctn.equipment_model_used != None:
-                myTechnology = AvailableTechnology.objects.get(id = myPrdctn.equipment_model_used.technology.id)
-            elif myPrdctn.labour_role_needed != None:
-                myTechnology = AvailableTechnology.objects.get(id = myPrdctn.labour_role_needed.technology.id)
-            else:
-                myTechnology = None
-                    
-            if myTechnology != None:
-                myTechnology.total_revenue_per_hour_Rs = myTechnology.total_revenue_per_hour_Rs  - myPrdctn.total_hourly_revenue_generated_for_this_section_Rs
-                myTechnology.save()
-            myPrdctn.delete(True)
 
 class UserChangeForm(forms.ModelForm):
     """A form for updating users. Includes all the fields on
