@@ -300,7 +300,7 @@ m2m_changed.connect(events_changed, sender=EventSchedule.previous_related_events
             
 class Section_Production_Rate(models.Model):
     technology = models.ForeignKey(AvailableTechnology, related_name='production_sections', on_delete=models.CASCADE, blank=True, null=True)
-    product_name = models.CharField(max_length=100)
+    section_name = models.CharField(max_length=100)
     product_measurement_unit = models.CharField(max_length=100, default='Units')
     # only handle save, if this below value is saved
     total_section_operating_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=14,decimal_places=4)
@@ -350,7 +350,7 @@ class Section_Production_Rate(models.Model):
         super(Section_Production_Rate, self).delete()
 
     def __str__(self):
-        return 'ID: ' + str(self.id) + ', PRODUCT: ' + self.product_name + ', PRODUCTION / HOUR: ' + str(self.net_amount_of_product_produced_per_hour) + ' ' + self.product_measurement_unit
+        return 'ID: ' + str(self.id) + ', SECTION: ' + self.section_name
 
 # maintenance will only be done if equipment is used, and that is:
 # the only data that comes from outside, so i donot need to add a foreign key

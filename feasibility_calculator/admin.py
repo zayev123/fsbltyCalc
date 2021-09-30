@@ -67,7 +67,7 @@ class EventScheduleAdmin(admin.ModelAdmin):
 
 @admin.register(Section_Production_Rate)
 class Section_Production_RateAdmin(admin.ModelAdmin):
-    list_display = ['id', 'product_name', 'net_amount_of_product_produced_per_hour', 'total_hourly_revenue_generated_for_this_section_Rs', 'total_section_operating_cost_per_hour_Rs', 'total_section_area_required_m2']
+    list_display = ['id', 'section_name', 'net_amount_of_product_produced_per_hour', 'total_hourly_revenue_generated_for_this_section_Rs', 'total_section_operating_cost_per_hour_Rs', 'total_section_area_required_m2']
     readonly_fields=['total_section_area_required_m2', 'total_section_operating_cost_per_hour_Rs', 'entire_maintenance_fraction_per_hour', 'amount_of_section_product_missed_per_hour_for_maintenance', 'net_amount_of_product_produced_per_hour', 'total_hourly_revenue_generated_for_this_section_Rs']
 
     actions = ['delete_selected']
