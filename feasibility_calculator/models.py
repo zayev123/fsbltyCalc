@@ -14,7 +14,8 @@ from django.db.models.signals import pre_save
 from django.dispatch import receiver
 from django.db.models.signals import m2m_changed
 
-
+from django.core.exceptions import ValidationError
+from django.utils.html import format_html
 ###### equipment rplacement cost is basically maintenance cost:
 ###### create a different class for it i think
 class ProjectManager_Manager(BaseUserManager):
@@ -103,9 +104,14 @@ class AvailableTechnology(models.Model):
     technology_name = models.CharField(max_length=100)
     total_start_up_cost_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
     total_operating_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
+    total_misc_ops_costs_per_hour_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
+    total_equipment_ops_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
+    total_labour_ops_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
     total_revenue_per_hour_Rs = models.DecimalField(default=0, max_digits=13,decimal_places=2)
     profit_margins_per_hour_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
     total_size_required_m2 = models.DecimalField(default=0, max_digits=8,decimal_places=2)
+    total_equip_size_reqs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
+    total_misc_size_reqs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
     start_date = models.DateTimeField()
     end_date = models.DateTimeField(blank=True, null=True)
     break_even_date = models.DateTimeField(blank=True, null=True)
@@ -114,6 +120,23 @@ class AvailableTechnology(models.Model):
     remarks = models.TextField(blank=True, null=True,)
     
     def save(self, *args, **kwargs):
+        equip_cost = 0
+        area = 0
+        if hasattr(self, 'equipments') and list(self.equipments.all()):
+            equipments = list(self.equipments.all())
+            for equipment in equipments:
+                equip_cost = equip_cost + equipment.total_running_cost_per_hour_Rs
+                area = area + equipment.total_area_required_for_all_units_m2
+        labo_cost = 0
+        if hasattr(self, 'labour_operating_costs') and list(self.labour_operating_costs.all()):
+            labours = list(self.labour_operating_costs.all())
+            for labour in labours:
+                labo_cost = labo_cost + labour.total_labourCost_per_hour_Rs
+        self.total_equip_size_reqs = area
+        self.total_labour_ops_cost_per_hour_Rs = labo_cost
+        self.total_equipment_ops_cost_per_hour_Rs = equip_cost
+        self.total_size_required_m2 = self.total_equip_size_reqs + self.total_misc_size_reqs        
+        self.total_operating_cost_per_hour_Rs = self.total_equipment_ops_cost_per_hour_Rs + self.total_labour_ops_cost_per_hour_Rs + self.total_misc_ops_costs_per_hour_Rs
         self.profit_margins_per_hour_Rs = self.total_revenue_per_hour_Rs - self.total_operating_cost_per_hour_Rs
         if self.end_date != None and self.profit_margins_per_hour_Rs != 0 and self.project.production_hours_per_day !=0:
             hours_to_break_even = self.total_start_up_cost_Rs/self.profit_margins_per_hour_Rs
@@ -171,6 +194,7 @@ class EventSchedule(models.Model):
     # you'll have to use a for loop in this case
     previous_related_events = models.ManyToManyField('EventSchedule', related_name='next_related_events', blank=True)
     latest_previous_dependent_event = models.CharField(max_length=100, blank=True, null=True)
+    is_completed = models.BooleanField(default= False)
     reference = models.FileField(upload_to='research_papers', blank=True, null=True, storage=OverwriteStorage())
     remarks = models.TextField(blank=True, null=True,)
 
@@ -281,7 +305,7 @@ class Section_Production_Rate(models.Model):
     # only handle save, if this below value is saved
     total_section_operating_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=14,decimal_places=4)
     total_section_area_required_m2 = models.DecimalField(default=0, max_digits=14,decimal_places=4)
-    max_amount_of_section_product_produced_per_hour = models.DecimalField(default=0, max_digits=14,decimal_places=4)
+    max_ideal_amount_of_section_product_produced_per_hour = models.DecimalField(default=0, max_digits=14,decimal_places=4)
     entire_maintenance_fraction_per_hour = models.DecimalField(default=0, max_digits=6,decimal_places=4)
     amount_of_section_product_missed_per_hour_for_maintenance = models.DecimalField(default=0, max_digits=12,decimal_places=4)
     net_amount_of_product_produced_per_hour = models.DecimalField(default=0, max_digits=14,decimal_places=4)
@@ -291,34 +315,38 @@ class Section_Production_Rate(models.Model):
     reference = models.FileField(upload_to='research_papers', blank=True, null=True, storage=OverwriteStorage())
 
     def save(self, *args, **kwargs):
-        self.amount_of_section_product_missed_per_hour_for_maintenance = self.max_amount_of_section_product_produced_per_hour * self.entire_maintenance_fraction_per_hour
-        self.net_amount_of_product_produced_per_hour = self.max_amount_of_section_product_produced_per_hour - self.amount_of_section_product_missed_per_hour_for_maintenance
+        self.amount_of_section_product_missed_per_hour_for_maintenance = self.max_ideal_amount_of_section_product_produced_per_hour * self.entire_maintenance_fraction_per_hour
+        self.net_amount_of_product_produced_per_hour = self.max_ideal_amount_of_section_product_produced_per_hour - self.amount_of_section_product_missed_per_hour_for_maintenance
         self.total_hourly_revenue_generated_for_this_section_Rs = self.selling_price_per_unit_of_product_Rs * self.net_amount_of_product_produced_per_hour
+        revy = self.total_hourly_revenue_generated_for_this_section_Rs
         if self.id == None:
             new_tech = self.technology
             new_tech.total_revenue_per_hour_Rs = new_tech.total_revenue_per_hour_Rs  + self.total_hourly_revenue_generated_for_this_section_Rs
             new_tech.save()
         # else, the id is retreived, and it is managed during presave
         super(Section_Production_Rate, self).save()
+        return revy
     
     def delete(self, *args, **kwargs):
         qdel_check = False
         if args and args[0]==True:
             qdel_check = True
-        if not qdel_check:   
-            myTechnology = self.technology
-            myTechnology.total_revenue_per_hour_Rs = myTechnology.total_revenue_per_hour_Rs  - self.total_hourly_revenue_generated_for_this_section_Rs
-            myTechnology.save()
+        if not qdel_check:
+            held_rev = 0
             if hasattr(self, 'equipments') and list(self.equipments.all()):
+                held_rev = self.amount_of_section_product_missed_per_hour_for_maintenance * self.selling_price_per_unit_of_product_Rs
                 equipments = list(self.equipments.all())
                 for equipment in equipments:
                     equipment.equiProductionSection = None
-                    equipment.save
+                    equipment.save()
             if hasattr(self, 'labours') and list(self.labours.all()):
                 labours = list(self.labours.all())
                 for labour in labours:
                     labour.laboProductionSection = None
                     labour.save()
+            myTechnology = self.technology
+            myTechnology.total_revenue_per_hour_Rs = myTechnology.total_revenue_per_hour_Rs  - self.total_hourly_revenue_generated_for_this_section_Rs - held_rev
+            myTechnology.save()
         super(Section_Production_Rate, self).delete()
 
     def __str__(self):
@@ -363,24 +391,32 @@ class Equipment(models.Model):
     remarks = models.TextField(blank=True, null=True,)
 
     def save(self, *args, **kwargs):
+        conflicting_techs = False
+        mystring = ''
+        if self.equiProductionSection != None and self.technology.id != self.equiProductionSection.technology.id:
+            conflicting_techs = True
+            mystring = str(self.equiProductionSection.technology)
         self.total_area_required_for_all_units_m2 = self.number_of_equipment_units_needed * self.area_required_per_Equipmentunit_m2
         self.total_parts_replacement_cost_per_hour_Rs = self.number_of_equipment_units_needed * self.parts_replacement_cost_per_equipmentUnit_per_hour_Rs
         self.total_resources_cost_per_hour_Rs = self.number_of_equipment_units_needed * self.resources_cost_per_equipmentUnit_per_hour_Rs
         self.total_maintenance_down_time_fractions_per_hour = self.number_of_equipment_units_needed * self.maintenance_down_time_fractions_per_equipmentUnit_per_hour
         self.total_running_cost_per_hour_Rs = self.total_parts_replacement_cost_per_hour_Rs + self.total_resources_cost_per_hour_Rs
-        if self.id == None:
+        if self.id == None and not conflicting_techs:
             myequiProductionSection = self.equiProductionSection
-            myTechnology = self.technology
             if myequiProductionSection != None:
                 myequiProductionSection.total_section_operating_cost_per_hour_Rs = myequiProductionSection.total_section_operating_cost_per_hour_Rs + self.total_running_cost_per_hour_Rs
                 myequiProductionSection.total_section_area_required_m2 = myequiProductionSection.total_section_area_required_m2 + self.total_area_required_for_all_units_m2
                 myequiProductionSection.entire_maintenance_fraction_per_hour = myequiProductionSection.entire_maintenance_fraction_per_hour + self.total_maintenance_down_time_fractions_per_hour
                 myequiProductionSection.save() 
-            myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs + self.total_running_cost_per_hour_Rs
-            myTechnology.total_size_required_m2 = myTechnology.total_size_required_m2  + self.total_area_required_for_all_units_m2
-            myTechnology.save()
         # else, the id is retreived, and it is managed during presave
-        super(Equipment, self).save()
+        if not conflicting_techs:
+            super(Equipment, self).save()
+        return mystring
+
+    def clean(self):
+        if self.save() != '':
+            myString = "The assigned technology and the production_section's assigned technology do not match."
+            raise ValidationError(format_html('<span style="color: #cc0033; font-weight: bold; font-size: large;">{0}</span>', myString))
 
     def delete(self, *args, **kwargs):
         qdel_check = False
@@ -388,21 +424,11 @@ class Equipment(models.Model):
             qdel_check = True
         if not qdel_check:
             myequiProductionSection = self.equiProductionSection
-            myTechnology = self.technology
-            print('yo')
             if myequiProductionSection != None:
-                old_net_revenue = myequiProductionSection.total_hourly_revenue_generated_for_this_section_Rs
-                print(old_net_revenue)
                 myequiProductionSection.total_section_operating_cost_per_hour_Rs = myequiProductionSection.total_section_operating_cost_per_hour_Rs - self.total_running_cost_per_hour_Rs
                 myequiProductionSection.total_section_area_required_m2 = myequiProductionSection.total_section_area_required_m2 - self.total_area_required_for_all_units_m2
                 myequiProductionSection.entire_maintenance_fraction_per_hour = myequiProductionSection.entire_maintenance_fraction_per_hour - self.total_maintenance_down_time_fractions_per_hour
                 myequiProductionSection.save()
-                new_net_revenue = myequiProductionSection.total_hourly_revenue_generated_for_this_section_Rs
-                print(new_net_revenue)
-            myTechnology.total_revenue_per_hour_Rs = myTechnology.total_revenue_per_hour_Rs - old_net_revenue + new_net_revenue
-            myTechnology.total_size_required_m2 = myTechnology.total_size_required_m2  - self.total_area_required_for_all_units_m2
-            myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs - self.total_running_cost_per_hour_Rs
-            myTechnology.save()
         super(Equipment, self).delete()
 
     def __str__(self):
@@ -419,7 +445,10 @@ def preSaveEquipment(sender, instance, **kwargs):
         pass
     else:
         # first_check if any of the costs changed
-        manage_presave_equipment(original_equipment, changed_equipment, current_tech, current_secProd)
+        if changed_equipment.equiProductionSection != None and changed_equipment.technology.id != changed_equipment.equiProductionSection.technology.id:
+            pass
+        else:
+            manage_presave_equipment(original_equipment, changed_equipment, current_secProd)
             
 # the reason why im not adding a calculation for it, is because
 # the way i calculate it may change every time
@@ -531,30 +560,36 @@ class Labour_PlantOperatingCost(models.Model):
     reference = models.FileField(upload_to='research_papers', blank=True, null=True, storage=OverwriteStorage())
 
     def save(self, *args, **kwargs):
+        conflicting_techs = False
+        mystring = ''
+        if self.laboProductionSection != None and self.technology.id != self.laboProductionSection.technology.id:
+            conflicting_techs = True
+            mystring = str(self.laboProductionSection.technology)
         self.total_labourCost_per_hour_Rs = self.number_of_labourers_required_for_this_role * (self.salary_per_hour_per_labourer_Rs + self.safety_risk_cost_per_hour_per_labourer_Rs)
-        if self.id == None:
-            laboProductionSection = self.equiProductionSection
-            myTechnology = self.technology
+        if self.id == None and not conflicting_techs:
+            laboProductionSection = self.laboProductionSection
             if laboProductionSection != None:
                 laboProductionSection.total_section_operating_cost_per_hour_Rs = laboProductionSection.total_section_operating_cost_per_hour_Rs + self.total_labourCost_per_hour_Rs
                 laboProductionSection.save() 
-            myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs + self.total_labourCost_per_hour_Rs
-            myTechnology.save()
         # else, the id is retreived, and it is managed during presave
-        super(Labour_PlantOperatingCost, self).save()
+        if not conflicting_techs:
+            super(Labour_PlantOperatingCost, self).save()
+        return mystring
+
+    def clean(self):
+        if self.save() != '':
+            myString = "The assigned technology and the production_section's assigned technology do not match."
+            raise ValidationError(format_html('<span style="color: #cc0033; font-weight: bold; font-size: large;">{0}</span>', myString))
 
     def delete(self, *args, **kwargs):
         qdel_check = False
         if args and args[0]==True:
             qdel_check = True
         if not qdel_check:
-            laboProductionSection = self.equiProductionSection
-            myTechnology = self.technology
+            laboProductionSection = self.laboProductionSection
             if laboProductionSection != None:
                 laboProductionSection.total_section_operating_cost_per_hour_Rs = laboProductionSection.total_section_operating_cost_per_hour_Rs - self.total_labourCost_per_hour_Rs
                 laboProductionSection.save()
-            myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs - self.total_labourCost_per_hour_Rs
-            myTechnology.save()
         super(Labour_PlantOperatingCost, self).delete()
 
     def __str__(self):
@@ -566,11 +601,13 @@ def preSaveLabour(sender, instance, **kwargs):
         original_labour = sender.objects.get(pk=instance.pk)
         changed_labour = instance
         current_tech = original_labour.technology
-        current_secProd = original_labour.equiProductionSection
+        current_secProd = original_labour.laboProductionSection
     except sender.DoesNotExist:
         pass
     else:
         # first_check if any of the costs changed
+        if changed_labour.laboProductionSection != None and changed_labour.technology.id != changed_labour.laboProductionSection.technology.id:
+            pass
         manage_presave_labour(original_labour, changed_labour, current_tech, current_secProd)
 
 class Miscellaneous_PlantOperatingCost(models.Model):
@@ -583,7 +620,7 @@ class Miscellaneous_PlantOperatingCost(models.Model):
     def save(self, *args, **kwargs):
         if self.id == None:
             myTechnology = self.technology
-            myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs  + self.per_hour_cost_Rs
+            myTechnology.total_misc_ops_costs_per_hour_Rs = myTechnology.total_misc_ops_costs_per_hour_Rs  + self.per_hour_cost_Rs
             myTechnology.save()
         # else, the id is retreived, and it is managed during presave
         super(Miscellaneous_PlantOperatingCost, self).save()
@@ -594,7 +631,7 @@ class Miscellaneous_PlantOperatingCost(models.Model):
             qdel_check = True
         if not qdel_check:
             myTechnology = self.technology
-            myTechnology.total_operating_cost_per_hour_Rs = myTechnology.total_operating_cost_per_hour_Rs  - self.per_hour_cost_Rs
+            myTechnology.total_misc_ops_costs_per_hour_Rs = myTechnology.total_misc_ops_costs_per_hour_Rs  - self.per_hour_cost_Rs
             myTechnology.save()
         super(Miscellaneous_PlantOperatingCost, self).delete()
 
@@ -615,12 +652,12 @@ def preSaveMsclOps(sender, instance, **kwargs):
             if current_tech.id != changed_msclOps.technology.id:
                 old_tech = current_tech
                 new_tech = changed_msclOps.technology
-                old_tech.total_operating_cost_per_hour_Rs = old_tech.total_operating_cost_per_hour_Rs - original_msclOps.per_hour_cost_Rs
-                new_tech.total_operating_cost_per_hour_Rs = new_tech.total_operating_cost_per_hour_Rs + changed_msclOps.per_hour_cost_Rs
+                old_tech.total_misc_ops_costs_per_hour_Rs = old_tech.total_misc_ops_costs_per_hour_Rs - original_msclOps.per_hour_cost_Rs
+                new_tech.total_misc_ops_costs_per_hour_Rs = new_tech.total_misc_ops_costs_per_hour_Rs + changed_msclOps.per_hour_cost_Rs
                 old_tech.save()
                 new_tech.save()
             else:
-                current_tech.total_operating_cost_per_hour_Rs = current_tech.total_operating_cost_per_hour_Rs - original_msclOps.per_hour_cost_Rs + changed_msclOps.per_hour_cost_Rs
+                current_tech.total_misc_ops_costs_per_hour_Rs = current_tech.total_misc_ops_costs_per_hour_Rs - original_msclOps.per_hour_cost_Rs + changed_msclOps.per_hour_cost_Rs
                 current_tech.save()
 
 
@@ -684,7 +721,7 @@ class Miscellaneous_Area_Requirement(models.Model):
     def save(self, *args, **kwargs):
         if self.id == None:
             myTechnology = self.technology
-            myTechnology.total_size_required_m2 = myTechnology.total_size_required_m2  + self.area_allotment_m2
+            myTechnology.total_misc_size_reqs = myTechnology.total_misc_size_reqs  + self.area_allotment_m2
             myTechnology.save()
         # else, the id is retreived, and it is managed during presave
         super(Miscellaneous_Area_Requirement, self).save()
@@ -695,7 +732,7 @@ class Miscellaneous_Area_Requirement(models.Model):
             qdel_check = True
         if not qdel_check:
             myTechnology = self.technology
-            myTechnology.total_size_required_m2 = myTechnology.total_size_required_m2  - self.area_allotment_m2
+            myTechnology.total_misc_size_reqs = myTechnology.total_misc_size_reqs  - self.area_allotment_m2
             myTechnology.save()
         super(Miscellaneous_Area_Requirement, self).delete()
 
@@ -716,12 +753,12 @@ def preSaveMsclArea(sender, instance, **kwargs):
             if current_tech.id != changed_msclArea.technology.id:
                 old_tech = current_tech
                 new_tech = changed_msclArea.technology
-                old_tech.total_size_required_m2 = old_tech.total_size_required_m2 - original_msclArea.area_allotment_m2
-                new_tech.total_size_required_m2 = new_tech.total_size_required_m2 + changed_msclArea.area_allotment_m2
+                old_tech.total_misc_size_reqs = old_tech.total_misc_size_reqs - original_msclArea.area_allotment_m2
+                new_tech.total_misc_size_reqs = new_tech.total_misc_size_reqs + changed_msclArea.area_allotment_m2
                 old_tech.save()
                 new_tech.save()
             else:
-                current_tech.total_size_required_m2 = current_tech.total_size_required_m2 - original_msclArea.area_allotment_m2 + changed_msclArea.area_allotment_m2
+                current_tech.total_misc_size_reqs = current_tech.total_misc_size_reqs - original_msclArea.area_allotment_m2 + changed_msclArea.area_allotment_m2
                 current_tech.save()
 # either kgs or units
 # in presave:
