@@ -104,12 +104,12 @@ class AvailableTechnology(models.Model):
     technology_name = models.CharField(max_length=100)
     total_start_up_cost_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
     total_operating_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
-    total_misc_ops_costs_per_hour_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
+    total_size_required_m2 = models.DecimalField(default=0, max_digits=8,decimal_places=2)
+    total_cost_per_part_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
+    total_number_of_parts_produced_per_hour = models.DecimalField(default=0, max_digits=12,decimal_places=2)
     total_equipment_ops_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
     total_labour_ops_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
-    total_revenue_per_hour_Rs = models.DecimalField(default=0, max_digits=13,decimal_places=2)
-    profit_margins_per_hour_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
-    total_size_required_m2 = models.DecimalField(default=0, max_digits=8,decimal_places=2)
+    total_misc_ops_costs_per_hour_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
     total_equip_size_reqs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
     total_misc_size_reqs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
     start_date = models.DateTimeField()
@@ -137,11 +137,10 @@ class AvailableTechnology(models.Model):
         self.total_equipment_ops_cost_per_hour_Rs = equip_cost
         self.total_size_required_m2 = self.total_equip_size_reqs + self.total_misc_size_reqs        
         self.total_operating_cost_per_hour_Rs = self.total_equipment_ops_cost_per_hour_Rs + self.total_labour_ops_cost_per_hour_Rs + self.total_misc_ops_costs_per_hour_Rs
-        self.profit_margins_per_hour_Rs = self.total_revenue_per_hour_Rs - self.total_operating_cost_per_hour_Rs
-        if self.end_date != None and self.profit_margins_per_hour_Rs != 0 and self.project.production_hours_per_day !=0:
-            hours_to_break_even = self.total_start_up_cost_Rs/self.profit_margins_per_hour_Rs
-            days_to_break_even = hours_to_break_even/self.project.production_hours_per_day
-            self.break_even_date = self.end_date + timedelta(days=days_to_break_even)
+        if self.total_number_of_parts_produced_per_hour != 0:
+            self.total_cost_per_part_Rs = self.total_operating_cost_per_hour_Rs / self.total_number_of_parts_produced_per_hour
+        else:
+            self.total_cost_per_part_Rs = -1
         super(AvailableTechnology, self).save(False)
 
     class Meta:
@@ -309,32 +308,28 @@ class Section_Production_Rate(models.Model):
     entire_maintenance_fraction_per_hour = models.DecimalField(default=0, max_digits=6,decimal_places=4)
     amount_of_section_product_missed_per_hour_for_maintenance = models.DecimalField(default=0, max_digits=12,decimal_places=4)
     net_amount_of_product_produced_per_hour = models.DecimalField(default=0, max_digits=14,decimal_places=4)
-    selling_price_per_unit_of_product_Rs = models.DecimalField(default=0, max_digits=8,decimal_places=2)
-    total_hourly_revenue_generated_for_this_section_Rs = models.DecimalField(default=0, max_digits=12,decimal_places=2)
     remarks = models.TextField(blank=True, null=True,)
     reference = models.FileField(upload_to='research_papers', blank=True, null=True, storage=OverwriteStorage())
 
     def save(self, *args, **kwargs):
         self.amount_of_section_product_missed_per_hour_for_maintenance = self.max_ideal_amount_of_section_product_produced_per_hour * self.entire_maintenance_fraction_per_hour
         self.net_amount_of_product_produced_per_hour = self.max_ideal_amount_of_section_product_produced_per_hour - self.amount_of_section_product_missed_per_hour_for_maintenance
-        self.total_hourly_revenue_generated_for_this_section_Rs = self.selling_price_per_unit_of_product_Rs * self.net_amount_of_product_produced_per_hour
-        revy = self.total_hourly_revenue_generated_for_this_section_Rs
         if self.id == None:
             new_tech = self.technology
-            new_tech.total_revenue_per_hour_Rs = new_tech.total_revenue_per_hour_Rs  + self.total_hourly_revenue_generated_for_this_section_Rs
+            new_tech.total_number_of_parts_produced_per_hour = new_tech.total_number_of_parts_produced_per_hour + self.net_amount_of_product_produced_per_hour
             new_tech.save()
         # else, the id is retreived, and it is managed during presave
         super(Section_Production_Rate, self).save()
-        return revy
+        return self.net_amount_of_product_produced_per_hour
     
     def delete(self, *args, **kwargs):
         qdel_check = False
         if args and args[0]==True:
             qdel_check = True
         if not qdel_check:
-            held_rev = 0
+            held_parts = 0
             if hasattr(self, 'equipments') and list(self.equipments.all()):
-                held_rev = self.amount_of_section_product_missed_per_hour_for_maintenance * self.selling_price_per_unit_of_product_Rs
+                held_parts = self.amount_of_section_product_missed_per_hour_for_maintenance
                 equipments = list(self.equipments.all())
                 for equipment in equipments:
                     equipment.equiProductionSection = None
@@ -345,7 +340,7 @@ class Section_Production_Rate(models.Model):
                     labour.laboProductionSection = None
                     labour.save()
             myTechnology = self.technology
-            myTechnology.total_revenue_per_hour_Rs = myTechnology.total_revenue_per_hour_Rs  - self.total_hourly_revenue_generated_for_this_section_Rs - held_rev
+            myTechnology.total_number_of_parts_produced_per_hour = myTechnology.total_number_of_parts_produced_per_hour - self.net_amount_of_product_produced_per_hour - held_parts
             myTechnology.save()
         super(Section_Production_Rate, self).delete()
 

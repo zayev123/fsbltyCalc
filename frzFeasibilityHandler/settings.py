@@ -32,7 +32,7 @@ myEnv.read_env()
 DEBUG = True
 
 ALLOWED_HOSTS = ['127.0.0.1', '192.168.10.6']
-ALLOWED_HOSTS = ['64.227.119.15',]
+#ALLOWED_HOSTS = ['64.227.119.15',]
 
 AUTH_USER_MODEL = 'feasibility_calculator.ProjectManager'
 

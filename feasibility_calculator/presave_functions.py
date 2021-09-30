@@ -3,16 +3,15 @@
 def manage_presave_production(original_section_prdtn, changed_section_prdtn, current_tech):
     changed_section_prdtn.amount_of_section_product_missed_per_hour_for_maintenance = changed_section_prdtn.max_ideal_amount_of_section_product_produced_per_hour * changed_section_prdtn.entire_maintenance_fraction_per_hour
     changed_section_prdtn.net_amount_of_product_produced_per_hour = changed_section_prdtn.max_ideal_amount_of_section_product_produced_per_hour - changed_section_prdtn.amount_of_section_product_missed_per_hour_for_maintenance
-    changed_section_prdtn.total_hourly_revenue_generated_for_this_section_Rs = changed_section_prdtn.selling_price_per_unit_of_product_Rs * changed_section_prdtn.net_amount_of_product_produced_per_hour
     if current_tech.id == changed_section_prdtn.technology.id:
-        current_tech.total_revenue_per_hour_Rs = current_tech.total_revenue_per_hour_Rs - original_section_prdtn.total_hourly_revenue_generated_for_this_section_Rs + changed_section_prdtn.total_hourly_revenue_generated_for_this_section_Rs
+        current_tech.total_number_of_parts_produced_per_hour = current_tech.total_number_of_parts_produced_per_hour - original_section_prdtn.net_amount_of_product_produced_per_hour + changed_section_prdtn.net_amount_of_product_produced_per_hour
         current_tech.save()
 
     else:
         old_tech = current_tech
         new_tech = changed_section_prdtn.technology
-        old_tech.total_revenue_per_hour_Rs = old_tech.total_revenue_per_hour_Rs  - original_section_prdtn.total_hourly_revenue_generated_for_this_section_Rs
-        new_tech.total_revenue_per_hour_Rs = new_tech.total_revenue_per_hour_Rs  + changed_section_prdtn.total_hourly_revenue_generated_for_this_section_Rs
+        old_tech.total_number_of_parts_produced_per_hour = old_tech.total_number_of_parts_produced_per_hour  - original_section_prdtn.net_amount_of_product_produced_per_hour
+        new_tech.total_number_of_parts_produced_per_hour = new_tech.total_number_of_parts_produced_per_hour  + changed_section_prdtn.net_amount_of_product_produced_per_hour
         old_tech.save()
         new_tech.save()
 

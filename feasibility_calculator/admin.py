@@ -28,9 +28,9 @@ class ProjectAdmin(admin.ModelAdmin):
 
 @admin.register(AvailableTechnology)
 class AvailableTechnologyAdmin(admin.ModelAdmin):
-    list_display = ['technology_name', 'project', 'total_start_up_cost_Rs', 'total_operating_cost_per_hour_Rs', 'total_revenue_per_hour_Rs', 'profit_margins_per_hour_Rs', 'total_size_required_m2', 'start_date', 'end_date', 'break_even_date']
-    #readonly_fields=['total_start_up_cost_Rs', 'total_operating_cost_per_hour_Rs', 'total_revenue_per_hour_Rs', 'profit_margins_per_hour_Rs', 'total_size_required_m2', 'break_even_date']
-    readonly_fields=[ 'break_even_date']
+    list_display = ['technology_name', 'project', 'total_start_up_cost_Rs', 'total_operating_cost_per_hour_Rs', 'total_size_required_m2', 'total_number_of_parts_produced_per_hour', 'total_cost_per_part_Rs', 'start_date', 'break_even_date']
+    readonly_fields=['total_start_up_cost_Rs', 'total_operating_cost_per_hour_Rs', 'total_size_required_m2', 'total_cost_per_part_Rs', 'total_number_of_parts_produced_per_hour', 'total_equipment_ops_cost_per_hour_Rs', 'total_labour_ops_cost_per_hour_Rs', 'total_misc_ops_costs_per_hour_Rs', 'total_equip_size_reqs', 'total_misc_size_reqs']
+    #readonly_fields=[ '']
 
 
 # it doesnt get its parent field in query delete
@@ -67,16 +67,16 @@ class EventScheduleAdmin(admin.ModelAdmin):
 
 @admin.register(Section_Production_Rate)
 class Section_Production_RateAdmin(admin.ModelAdmin):
-    list_display = ['id', 'section_name', 'net_amount_of_product_produced_per_hour', 'total_hourly_revenue_generated_for_this_section_Rs', 'total_section_operating_cost_per_hour_Rs', 'total_section_area_required_m2']
-    readonly_fields=['total_section_area_required_m2', 'total_section_operating_cost_per_hour_Rs', 'entire_maintenance_fraction_per_hour', 'amount_of_section_product_missed_per_hour_for_maintenance', 'net_amount_of_product_produced_per_hour', 'total_hourly_revenue_generated_for_this_section_Rs']
+    list_display = ['id', 'section_name', 'net_amount_of_product_produced_per_hour', 'total_section_operating_cost_per_hour_Rs', 'total_section_area_required_m2']
+    readonly_fields=['total_section_area_required_m2', 'total_section_operating_cost_per_hour_Rs', 'entire_maintenance_fraction_per_hour', 'amount_of_section_product_missed_per_hour_for_maintenance', 'net_amount_of_product_produced_per_hour',]
 
     actions = ['delete_selected']
 
     def delete_queryset(self, request, queryset):
         for myPrdctn in queryset:
-            held_rev = 0
+            held_parts = 0
             if hasattr(myPrdctn, 'equipments') and list(myPrdctn.equipments.all()):
-                held_rev = myPrdctn.amount_of_section_product_missed_per_hour_for_maintenance * myPrdctn.selling_price_per_unit_of_product_Rs
+                held_parts = myPrdctn.amount_of_section_product_missed_per_hour_for_maintenance
                 equipments = list(myPrdctn.equipments.all())
                 for equipment in equipments:
                     equipment.equiProductionSection = None
@@ -87,7 +87,7 @@ class Section_Production_RateAdmin(admin.ModelAdmin):
                     labour.laboProductionSection = None
                     labour.save()
             myTechnology = AvailableTechnology.objects.get(id = myPrdctn.technology.id)
-            myTechnology.total_revenue_per_hour_Rs = myTechnology.total_revenue_per_hour_Rs  - myPrdctn.total_hourly_revenue_generated_for_this_section_Rs - held_rev
+            myTechnology.total_number_of_parts_produced_per_hour = myTechnology.total_number_of_parts_produced_per_hour  - myPrdctn.net_amount_of_product_produced_per_hour - held_parts
             myTechnology.save()
             myPrdctn.delete(True)
 
@@ -107,7 +107,7 @@ class EquipmentAdmin(admin.ModelAdmin):
                 myequiProductionSectiond.total_section_operating_cost_per_hour_Rs = myequiProductionSectiond.total_section_operating_cost_per_hour_Rs - myEquipment.total_running_cost_per_hour_Rs
                 myequiProductionSectiond.total_section_area_required_m2 = myequiProductionSectiond.total_section_area_required_m2 - myEquipment.total_area_required_for_all_units_m2
                 myequiProductionSectiond.entire_maintenance_fraction_per_hour = myequiProductionSectiond.entire_maintenance_fraction_per_hour - myEquipment.total_maintenance_down_time_fractions_per_hour
-                myequiProductionSection.save()
+                myequiProductionSectiond.save()
             myEquipment.delete(True)
 
 @admin.register(Equipment_Maintenance_Cost)
