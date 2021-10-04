@@ -83,6 +83,18 @@ class ProjectManager(AbstractBaseUser):
         # Simplest possible answer: All admins are staff
         return self.is_admin
 
+    def delete(self, *args, **kwargs):
+        qdel_check = False
+        if args and args[0]==True:
+            qdel_check = True
+        if not qdel_check:
+            if hasattr(self, 'productions') and list(self.productions.all()):
+                productions = list(self.productions.all())
+                for production in productions:
+                    production.supervisor = None
+                    production.save()
+        super(ProjectManager, self).delete()
+
     class Meta:
         verbose_name_plural = "            3. Supervisors"
 
@@ -169,7 +181,7 @@ class Production(models.Model):
     total_revenue_generated_per_hour_Rs = models.DecimalField(default=0, max_digits=18,decimal_places=6)
     total_profit_generated_per_hour_Rs = models.DecimalField(default=0, max_digits=18,decimal_places=6)
     end_line_production_hours_per_day_weekly_projection = models.DecimalField(default=0, max_digits=8,decimal_places=6)
-    supervisor = models.ForeignKey(ProjectManager, related_name='Production', on_delete=models.CASCADE)
+    supervisor = models.ForeignKey(ProjectManager, related_name='productions', on_delete=models.DO_NOTHING, blank=True, null=True)
     project_start_date = models.DateTimeField()
     project_end_date = models.DateTimeField(blank=True, null=True)
     break_even_date = models.DateTimeField(blank=True, null=True)

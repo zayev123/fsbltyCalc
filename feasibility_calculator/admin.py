@@ -265,6 +265,15 @@ class UserAdmin(BaseUserAdmin):
     filter_horizontal = ()
     list_display = ['id', 'email', 'first_name']
 
+    def delete_queryset(self, request, queryset):
+        for user in queryset:
+            if hasattr(user, 'productions') and list(user.productions.all()):
+                productions = list(user.productions.all())
+                for production in productions:
+                    production.supervisor = None
+                    production.save()
+            user.delete(True)
+
 
 # Now register the new UserAdmin...
 admin.site.register(ProjectManager, UserAdmin)
