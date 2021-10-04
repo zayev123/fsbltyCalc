@@ -44,7 +44,6 @@ class CompanyOnlyOperatingCostAdmin(admin.ModelAdmin):
 class ProductionAdmin(admin.ModelAdmin):
     list_display = ['product_name', 'company', 'total_start_up_cost_Rs', 'total_production_cost_per_hour_Rs', 'total_size_required_m2', 'total_revenue_generated_per_hour_Rs', 'total_profit_generated_per_hour_Rs', 'project_start_date', 'break_even_date']
     readonly_fields=['total_start_up_cost_Rs', 'total_production_cost_per_hour_Rs', 'total_size_required_m2', 'total_amount_of_products_sold_per_hour', 'total_cost_per_product_Rs', 'total_revenue_generated_per_hour_Rs', 'total_profit_generated_per_hour_Rs','break_even_date']
-    #readonly_fields=['']
 
     def delete_queryset(self, request, queryset):
         for myProd in queryset:
@@ -109,7 +108,7 @@ class LineAdmin(admin.ModelAdmin):
 
 @admin.register(LineEquipment)
 class LineEquipmentAdmin(admin.ModelAdmin):
-    list_display = ['equipment_name', 'Line', 'number_of_equipment_units_needed', 'total_area_required_for_all_units_m2', 'total_running_cost_per_hour_Rs', 'total_maintenance_down_time_fractions_per_hour']
+    list_display = ['equipment_name', 'line', 'number_of_equipment_units_needed', 'total_area_required_for_all_units_m2', 'total_running_cost_per_hour_Rs', 'total_maintenance_down_time_fractions_per_hour']
     readonly_fields=['maintenance_down_time_fractions_per_equipmentUnit_per_hour', 'parts_replacement_cost_per_equipmentUnit_per_hour_Rs', 'resources_cost_per_equipmentUnit_per_hour_Rs', 'total_area_required_for_all_units_m2', 'total_running_cost_per_hour_Rs', 'total_parts_replacement_cost_per_hour_Rs', 'total_maintenance_down_time_fractions_per_hour', 'total_resources_cost_per_hour_Rs']
 
     actions = ['delete_selected']
@@ -117,7 +116,7 @@ class LineEquipmentAdmin(admin.ModelAdmin):
 
     def delete_queryset(self, request, queryset):
         for myEquipment in queryset:
-            myLine = Line.objects.get(id = myEquipment.Line.id)
+            myLine = Line.objects.get(id = myEquipment.line.id)
             myLine.line_operating_cost_per_hour_Rs = myLine.line_operating_cost_per_hour_Rs - myEquipment.total_running_cost_per_hour_Rs
             myLine.line_area_required_m2 = myLine.line_area_required_m2 - myEquipment.total_area_required_for_all_units_m2
             myLine.entire_maintenance_fraction_per_hour = myLine.entire_maintenance_fraction_per_hour - myEquipment.total_maintenance_down_time_fractions_per_hour
@@ -161,7 +160,7 @@ class LineLabourCostAdmin(admin.ModelAdmin):
 
     def delete_queryset(self, request, queryset):
         for myLbOps in queryset:
-            line = Line.objects.get(id = myLbOps.Line.id)
+            line = Line.objects.get(id = myLbOps.line.id)
             line.line_operating_cost_per_hour_Rs = line.line_operating_cost_per_hour_Rs - myLbOps.total_labourCost_per_hour_Rs
             line.save()
             myLbOps.delete(True)
@@ -175,7 +174,7 @@ class LineRawMaterialCostAdmin(admin.ModelAdmin):
 
     def delete_queryset(self, request, queryset):
         for myRawMCost in queryset:
-            line = LineRawMaterialCost.objects.get(id = myRawMCost.Line.id)
+            line = Line.objects.get(id = myRawMCost.line.id)
             line.line_operating_cost_per_hour_Rs = line.line_operating_cost_per_hour_Rs - myRawMCost.raw_material_net_cost_per_hour_Rs
             line.save()
             myRawMCost.delete(True)

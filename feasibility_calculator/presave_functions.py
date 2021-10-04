@@ -96,7 +96,10 @@ def manage_presave_events(original_event, changed_event, current_prod):
             current_prod.save()
 
 def manage_presave_line(original_line, changed_line, current_prod):
-    changed_line.line_product_net_shipping_cost_per_hour_Rs = changed_line.line_product_shipping_cost_per_bulk_Rs / ((changed_line.working_days_per_year * changed_line.working_hours_per_day) / changed_line.line_product_shipping_frequency_per_year)
+    if changed_line.working_days_per_year !=0 and changed_line.working_hours_per_day !=0 and changed_line.line_product_shipping_frequency_per_year != 0:
+        changed_line.line_product_net_shipping_cost_per_hour_Rs = changed_line.line_product_shipping_cost_per_bulk_Rs / ((changed_line.working_days_per_year * changed_line.working_hours_per_day) / changed_line.line_product_shipping_frequency_per_year)
+    else:
+        changed_line.line_product_net_shipping_cost_per_hour_Rs = 0 
     changed_line.amount_of_section_product_missed_per_hour_for_maintenance = changed_line.max_ideal_amount_of_section_product_produced_per_hour * changed_line.entire_maintenance_fraction_per_hour
     changed_line.net_amount_of_product_produced_per_hour = changed_line.max_ideal_amount_of_section_product_produced_per_hour - changed_line.amount_of_section_product_missed_per_hour_for_maintenance
     if current_prod.id == changed_line.production.id:
@@ -105,7 +108,7 @@ def manage_presave_line(original_line, changed_line, current_prod):
         current_prod.save()
     else:
         old_prod = current_prod
-        new_prod = changed_line.technology
+        new_prod = changed_line.production
         old_prod.total_size_required_m2 = old_prod.total_size_required_m2 - original_line.line_area_required_m2
         old_prod.total_production_cost_per_hour_Rs = old_prod.total_production_cost_per_hour_Rs - original_line.line_operating_cost_per_hour_Rs - original_line.line_product_net_shipping_cost_per_hour_Rs
         new_prod.total_size_required_m2 = new_prod.total_size_required_m2 + changed_line.line_area_required_m2
@@ -121,9 +124,9 @@ def manage_presave_lineEquipment(original_equipment, changed_equipment, current_
     changed_equipment.total_maintenance_down_time_fractions_per_hour = changed_equipment.number_of_equipment_units_needed * changed_equipment.maintenance_down_time_fractions_per_equipmentUnit_per_hour
     changed_equipment.total_running_cost_per_hour_Rs = changed_equipment.total_parts_replacement_cost_per_hour_Rs + changed_equipment.total_resources_cost_per_hour_Rs
     # do all other changes, after parent foreign kef is handled
-    if current_line.id != changed_equipment.Line.id:
+    if current_line.id != changed_equipment.line.id:
         old_line = current_line
-        new_line = changed_equipment.Line
+        new_line = changed_equipment.line
         # here, cost and size are changed
         old_line.line_operating_cost_per_hour_Rs = old_line.line_operating_cost_per_hour_Rs - original_equipment.total_running_cost_per_hour_Rs
         old_line.line_area_required_m2 = old_line.line_area_required_m2  - original_equipment.total_area_required_for_all_units_m2
@@ -149,12 +152,19 @@ def manage_presave_Linelabour(original_labour, changed_labour, current_line):
         old_line = current_line
         new_line = changed_labour.line
         # here, cost and size are changed
+        print('start')
+        print(original_labour.total_labourCost_per_hour_Rs)
+        print(changed_labour.total_labourCost_per_hour_Rs)
         old_line.line_operating_cost_per_hour_Rs = old_line.line_operating_cost_per_hour_Rs - original_labour.total_labourCost_per_hour_Rs
-
         new_line.line_operating_cost_per_hour_Rs = new_line.line_operating_cost_per_hour_Rs + changed_labour.total_labourCost_per_hour_Rs
-
+        print('middle')
+        print(old_line.line_operating_cost_per_hour_Rs)
+        print(new_line.line_operating_cost_per_hour_Rs)
         old_line.save()
         new_line.save()
+        print('end')
+        print(old_line.line_operating_cost_per_hour_Rs)
+        print(new_line.line_operating_cost_per_hour_Rs)
     else:
         current_line.line_operating_cost_per_hour_Rs = current_line.line_operating_cost_per_hour_Rs - original_labour.total_labourCost_per_hour_Rs + changed_labour.total_labourCost_per_hour_Rs
         current_line.save()
@@ -195,9 +205,12 @@ def manage_presave_lineEquiResource(original_resource, changed_resource, current
         new_equip.save()
 
 def manage_presave_rawMatHourlyCost(original_rawMatCost, changed_rawMatCost, current_line):
-    new_line = changed_rawMatCost.production
-    changed_rawMatCost.raw_material_net_cost_per_hour_Rs = (changed_rawMatCost.raw_material_bulk_purchase_cost_Rs + changed_rawMatCost.raw_material_transport_cost_per_bulk_Rs) / ((new_line.working_days_per_year * new_line.working_hours_per_day) / changed_rawMatCost.purchase_frquency_per_year)
-    if current_line.id != changed_rawMatCost.production.id:
+    if changed_rawMatCost.working_days_per_year_for_this_line != 0 and changed_rawMatCost.working_hours_per_day_for_this_line != 0 and changed_rawMatCost.purchase_frquency_per_year:
+        changed_rawMatCost.raw_material_net_cost_per_hour_Rs = (changed_rawMatCost.raw_material_bulk_purchase_cost_Rs + changed_rawMatCost.raw_material_transport_cost_per_bulk_Rs) / ((changed_rawMatCost.working_days_per_year_for_this_line * changed_rawMatCost.working_hours_per_day_for_this_line) / changed_rawMatCost.purchase_frquency_per_year)
+    else:
+        changed_rawMatCost.raw_material_net_cost_per_hour_Rs = 0
+    if current_line.id != changed_rawMatCost.line.id:
+        new_line = changed_rawMatCost.line
         old_line = current_line
         old_line.line_operating_cost_per_hour_Rs = old_line.line_operating_cost_per_hour_Rs - original_rawMatCost.raw_material_net_cost_per_hour_Rs
         new_line.line_operating_cost_per_hour_Rs = new_line.line_operating_cost_per_hour_Rs + changed_rawMatCost.raw_material_net_cost_per_hour_Rs

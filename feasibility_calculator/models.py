@@ -168,7 +168,7 @@ class Production(models.Model):
     selling_price_per_product_Rs = models.DecimalField(default=0, max_digits=18,decimal_places=6)
     total_revenue_generated_per_hour_Rs = models.DecimalField(default=0, max_digits=18,decimal_places=6)
     total_profit_generated_per_hour_Rs = models.DecimalField(default=0, max_digits=18,decimal_places=6)
-    end_line_production_hours_per_day_weekly_projection = models.DecimalField(default=0, max_digits=6,decimal_places=4)
+    end_line_production_hours_per_day_weekly_projection = models.DecimalField(default=0, max_digits=8,decimal_places=6)
     supervisor = models.ForeignKey(ProjectManager, related_name='Production', on_delete=models.CASCADE)
     project_start_date = models.DateTimeField()
     project_end_date = models.DateTimeField(blank=True, null=True)
@@ -335,25 +335,28 @@ class Line(models.Model):
     production = models.ForeignKey(Production, related_name='production_lines', on_delete=models.CASCADE, blank=True, null=True)
     line_name = models.CharField(max_length=100)
     automation_percentage = models.DecimalField(default=0, max_digits=8,decimal_places=6)
-    working_days_per_year = models.DecimalField(default=365, max_digits=10,decimal_places=6)
+    working_days_per_year = models.DecimalField(default=365, max_digits=9,decimal_places=6)
     working_hours_per_day = models.DecimalField(default=24, max_digits=8,decimal_places=6)
     product_measurement_unit = models.CharField(max_length=100, default='Units')
     # only handle save, if this below value is saved
-    line_operating_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=14,decimal_places=4)
+    line_operating_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=16,decimal_places=6)
     line_product_shipping_cost_per_bulk_Rs = models.DecimalField(default=0, max_digits=16,decimal_places=6)
     line_product_shipping_frequency_per_year = models.DecimalField(default=0, max_digits=16,decimal_places=6)
     line_product_net_shipping_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=16,decimal_places=6)
-    line_area_required_m2 = models.DecimalField(default=0, max_digits=14,decimal_places=4)
-    max_ideal_amount_of_section_product_produced_per_hour = models.DecimalField(default=0, max_digits=14,decimal_places=4)
-    entire_maintenance_fraction_per_hour = models.DecimalField(default=0, max_digits=6,decimal_places=4)
-    amount_of_section_product_missed_per_hour_for_maintenance = models.DecimalField(default=0, max_digits=12,decimal_places=4)
-    net_amount_of_product_produced_per_hour = models.DecimalField(default=0, max_digits=14,decimal_places=4)
+    line_area_required_m2 = models.DecimalField(default=0, max_digits=16,decimal_places=6)
+    max_ideal_amount_of_section_product_produced_per_hour = models.DecimalField(default=0, max_digits=16,decimal_places=6)
+    entire_maintenance_fraction_per_hour = models.DecimalField(default=0, max_digits=8,decimal_places=6)
+    amount_of_section_product_missed_per_hour_for_maintenance = models.DecimalField(default=0, max_digits=16,decimal_places=6)
+    net_amount_of_product_produced_per_hour = models.DecimalField(default=0, max_digits=16,decimal_places=6)
     is_last_stage = models.BooleanField(default=False)
     remarks = models.TextField(blank=True, null=True,)
     reference = models.FileField(upload_to='research_papers', blank=True, null=True, storage=OverwriteStorage())
 
     def save(self, *args, **kwargs):
-        self.line_product_net_shipping_cost_per_hour_Rs = self.line_product_shipping_cost_per_bulk_Rs / ((self.working_days_per_year * self.working_hours_per_day) / self.line_product_shipping_frequency_per_year)
+        if self.working_days_per_year !=0 and self.working_hours_per_day !=0 and self.line_product_shipping_frequency_per_year != 0:
+            self.line_product_net_shipping_cost_per_hour_Rs = self.line_product_shipping_cost_per_bulk_Rs / ((self.working_days_per_year * self.working_hours_per_day) / self.line_product_shipping_frequency_per_year)
+        else:
+           self.line_product_net_shipping_cost_per_hour_Rs = 0 
         self.amount_of_section_product_missed_per_hour_for_maintenance = self.max_ideal_amount_of_section_product_produced_per_hour * self.entire_maintenance_fraction_per_hour
         self.net_amount_of_product_produced_per_hour = self.max_ideal_amount_of_section_product_produced_per_hour - self.amount_of_section_product_missed_per_hour_for_maintenance
         if self.id == None:
@@ -400,19 +403,19 @@ def preSaveLine(sender, instance, **kwargs):
 # miscellaneous "project" equipments
 
 class LineEquipment(models.Model):
-    Line = models.ForeignKey(Line, related_name='line_equipments', on_delete=models.CASCADE, blank=True, null=True)
+    line = models.ForeignKey(Line, related_name='line_equipments', on_delete=models.CASCADE, blank=True, null=True)
     equipment_name = models.CharField(max_length=100)
     number_of_equipment_units_needed = models.DecimalField(default=0, max_digits=16,decimal_places=6)
     total_area_required_for_all_units_m2 = models.DecimalField(default=0, max_digits=12,decimal_places=6)
     total_running_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=16,decimal_places=6)
     total_parts_replacement_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=16,decimal_places=6)
     total_resources_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=16,decimal_places=6)
-    total_maintenance_down_time_fractions_per_hour = models.DecimalField(default=0, max_digits=8,decimal_places=4)
+    total_maintenance_down_time_fractions_per_hour = models.DecimalField(default=0, max_digits=10,decimal_places=6)
     area_required_per_Equipmentunit_m2 = models.DecimalField(default=0, max_digits=16,decimal_places=6)
     # to be updated whenever a resource is added or subtracted
     parts_replacement_cost_per_equipmentUnit_per_hour_Rs = models.DecimalField(default=0, max_digits=16,decimal_places=6)
     resources_cost_per_equipmentUnit_per_hour_Rs = models.DecimalField(default=0, max_digits=16,decimal_places=6)
-    maintenance_down_time_fractions_per_equipmentUnit_per_hour = models.DecimalField(default=0, max_digits=8,decimal_places=4)
+    maintenance_down_time_fractions_per_equipmentUnit_per_hour = models.DecimalField(default=0, max_digits=10,decimal_places=6)
     reference = models.FileField(upload_to='research_papers', blank=True, null=True, storage=OverwriteStorage())
     remarks = models.TextField(blank=True, null=True,)
 
@@ -423,7 +426,7 @@ class LineEquipment(models.Model):
         self.total_maintenance_down_time_fractions_per_hour = self.number_of_equipment_units_needed * self.maintenance_down_time_fractions_per_equipmentUnit_per_hour
         self.total_running_cost_per_hour_Rs = self.total_parts_replacement_cost_per_hour_Rs + self.total_resources_cost_per_hour_Rs
         if self.id == None:
-            myLine = self.Line
+            myLine = self.line
             myLine.line_operating_cost_per_hour_Rs = myLine.line_operating_cost_per_hour_Rs + self.total_running_cost_per_hour_Rs
             myLine.line_area_required_m2 = myLine.line_area_required_m2 + self.total_area_required_for_all_units_m2
             myLine.entire_maintenance_fraction_per_hour = myLine.entire_maintenance_fraction_per_hour + self.total_maintenance_down_time_fractions_per_hour
@@ -436,7 +439,7 @@ class LineEquipment(models.Model):
         if args and args[0]==True:
             qdel_check = True
         if not qdel_check:
-            myLine = self.Line
+            myLine = self.line
             myLine.line_operating_cost_per_hour_Rs = myLine.line_operating_cost_per_hour_Rs - self.total_running_cost_per_hour_Rs
             myLine.line_area_required_m2 = myLine.line_area_required_m2 - self.total_area_required_for_all_units_m2
             myLine.entire_maintenance_fraction_per_hour = myLine.entire_maintenance_fraction_per_hour - self.total_maintenance_down_time_fractions_per_hour
@@ -454,7 +457,7 @@ def preSaveLineEquipment(sender, instance, **kwargs):
     try:
         original_equipment = sender.objects.get(pk=instance.pk)
         changed_equipment = instance
-        current_line = original_equipment.Line
+        current_line = original_equipment.line
     except sender.DoesNotExist:
         pass
     else:
@@ -466,7 +469,7 @@ def preSaveLineEquipment(sender, instance, **kwargs):
 class LineEquipmentMaintenanceCost(models.Model):
     maintenance_name = models.CharField(max_length=100)
     equipment = models.ForeignKey(LineEquipment, related_name='maintenance_costs', on_delete=models.CASCADE)
-    maintenance_downTime_fraction_per_equipmentUnit_per_hour = models.DecimalField(default=0, max_digits=4,decimal_places=4)
+    maintenance_downTime_fraction_per_equipmentUnit_per_hour = models.DecimalField(default=0, max_digits=6,decimal_places=6)
     part_replacement_cost_per_equipmentUnit_per_hour_Rs = models.DecimalField(default=0, max_digits=16,decimal_places=6)
     remarks = models.TextField(blank=True, null=True,)
     reference = models.FileField(upload_to='research_papers', blank=True, null=True, storage=OverwriteStorage())
@@ -575,9 +578,10 @@ class LineLabourCost(models.Model):
 
     def save(self, *args, **kwargs):
         self.total_labourCost_per_hour_Rs = self.number_of_labourers_required_for_this_role * (self.salary_per_hour_per_labourer_Rs + self.safety_risk_cost_per_hour_per_labourer_Rs)
-        line = self.line
-        line.line_operating_cost_per_hour_Rs = line.line_operating_cost_per_hour_Rs + self.total_labourCost_per_hour_Rs
-        line.save() 
+        if self.id == None:
+            line = self.line
+            line.line_operating_cost_per_hour_Rs = line.line_operating_cost_per_hour_Rs + self.total_labourCost_per_hour_Rs
+            line.save() 
         # else, the id is retreived, and it is managed during presave
         super(LineLabourCost, self).save()
 
@@ -617,13 +621,18 @@ class LineRawMaterialCost(models.Model):
     raw_material_transport_cost_per_bulk_Rs = models.DecimalField(default=0, max_digits=16,decimal_places=6)
     purchase_frquency_per_year = models.DecimalField(default=0, max_digits=16,decimal_places=6)
     raw_material_net_cost_per_hour_Rs = models.DecimalField(default=0, max_digits=16,decimal_places=6)
+    working_days_per_year_for_this_line = models.DecimalField(default=0, max_digits=9,decimal_places=6)
+    working_hours_per_day_for_this_line = models.DecimalField(default=0, max_digits=8,decimal_places=6)
     remarks = models.TextField(blank=True, null=True,)
     reference = models.FileField(upload_to='research_papers', blank=True, null=True, storage=OverwriteStorage())
 
     def save(self, *args, **kwargs):
-        myline = self.line
-        self.raw_material_net_cost_per_hour_Rs = (self.raw_material_bulk_purchase_cost_Rs + self.raw_material_transport_cost_per_bulk_Rs) / ((myline.working_days_per_year * myline.working_hours_per_day) / self.purchase_frquency_per_year)
+        if self.working_days_per_year_for_this_line != 0 and self.working_hours_per_day_for_this_line != 0 and self.purchase_frquency_per_year:
+            self.raw_material_net_cost_per_hour_Rs = (self.raw_material_bulk_purchase_cost_Rs + self.raw_material_transport_cost_per_bulk_Rs) / ((self.working_days_per_year_for_this_line * self.working_hours_per_day_for_this_line) / self.purchase_frquency_per_year)
+        else:
+            self.raw_material_net_cost_per_hour_Rs = 0
         if self.id == None:
+            myline = self.line
             myline.line_operating_cost_per_hour_Rs = myline.line_operating_cost_per_hour_Rs  + self.raw_material_net_cost_per_hour_Rs
             myline.save()
         # else, the id is retreived, and it is managed during presave
@@ -686,7 +695,7 @@ class MiscellaneousProductionOperatingCost(models.Model):
         return 'ID: ' + str(self.id) + ', PRODUCTION OPERATION NAME: ' + self.miscellaneous_operation_name
 
     class Meta:
-        verbose_name_plural = "   12. Miscellaneous Production Facility Operating Costs"
+        verbose_name_plural = "   12. Miscellaneous - Production Facility Operating Costs"
 
 @receiver(pre_save, sender=MiscellaneousProductionOperatingCost)
 def preSaveMsclOps(sender, instance, **kwargs):
@@ -730,7 +739,7 @@ class MiscellaneousProductionInstallationCost(models.Model):
         return 'ID: ' + str(self.id) + ', PRODUCTION INSTALLATION NAME: ' + self.miscellaneous_installation_name
 
     class Meta:
-        verbose_name_plural = "  13. Miscellaneous Production Facility Installation Costs"
+        verbose_name_plural = "  13. Miscellaneous - Production Facility Installation Costs"
 
 @receiver(pre_save, sender=MiscellaneousProductionInstallationCost)
 def preSaveMsclInstls(sender, instance, **kwargs):
@@ -773,7 +782,7 @@ class MiscellaneousProductionAreaRequirement(models.Model):
         return 'ID: ' + str(self.id) + ', PRODUCTION AREA ROLE: ' + self.miscellaneous_area_role
 
     class Meta:
-        verbose_name_plural = " 14. Miscellaneous Production Facility Area Requirements"
+        verbose_name_plural = " 14. Miscellaneous - Production Facility Area Requirements"
 
 @receiver(pre_save, sender=MiscellaneousProductionAreaRequirement)
 def preSaveMsclArea(sender, instance, **kwargs):
