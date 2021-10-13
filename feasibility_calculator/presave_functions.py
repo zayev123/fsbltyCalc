@@ -152,19 +152,10 @@ def manage_presave_Linelabour(original_labour, changed_labour, current_line):
         old_line = current_line
         new_line = changed_labour.line
         # here, cost and size are changed
-        print('start')
-        print(original_labour.total_labourCost_per_hour_Rs)
-        print(changed_labour.total_labourCost_per_hour_Rs)
         old_line.line_operating_cost_per_hour_Rs = old_line.line_operating_cost_per_hour_Rs - original_labour.total_labourCost_per_hour_Rs
         new_line.line_operating_cost_per_hour_Rs = new_line.line_operating_cost_per_hour_Rs + changed_labour.total_labourCost_per_hour_Rs
-        print('middle')
-        print(old_line.line_operating_cost_per_hour_Rs)
-        print(new_line.line_operating_cost_per_hour_Rs)
         old_line.save()
         new_line.save()
-        print('end')
-        print(old_line.line_operating_cost_per_hour_Rs)
-        print(new_line.line_operating_cost_per_hour_Rs)
     else:
         current_line.line_operating_cost_per_hour_Rs = current_line.line_operating_cost_per_hour_Rs - original_labour.total_labourCost_per_hour_Rs + changed_labour.total_labourCost_per_hour_Rs
         current_line.save()
