@@ -57,7 +57,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'knox',
-    'feasibility_calculator'
+    'feasibility_calculator',
+    'electroplating_automation'
 ]
 
 MIDDLEWARE = [
