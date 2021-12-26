@@ -14,29 +14,50 @@ from operator import attrgetter
 # there needs to be a record of what racks are where
 # rack position and time left for rack in that position, a new model
 # i need to update the racks list upon each turn
+# insert crane opertion, and delete crane operation
+# make only just enough time shift upon each change
+# but the list has already bbeen updated along the recursions, so it should be kept seperate from the racks, 
+# and only the last result_map should be stored in the class
+# the cranes list should also move along
+# for multiple cranes, you'll have to see that by looking at one, it cant look at the other one that 
+# requires it more. So you need to check, which rack is more critical for which crane
+
 
 class RackTrack():
-    def __init__(self, tank_unmber, remaining_tank_time, rack_index):
+    def __init__(self, rack_index, tank_number, remaining_tank_time, line_entry_added_time_available, entry_time_min_time_tank_number, entry_time_min_time_rack_remainingTimeAvailable):
         self.rack_index = rack_index
-        self.tank_unmber = tank_unmber
+        self.tank_number = tank_number
         self.remaining_tank_time = remaining_tank_time
+        entry_time_min_time_tank_number = entry_time_min_time_tank_number
+        entry_time_min_time_rack_remainingTimeAvailable = entry_time_min_time_rack_remainingTimeAvailable
+        line_entry_added_time_available = line_entry_added_time_available
+        # shifting this will shift the entire line and hve effects everywhere # inititally, this will be the the same as the min time tank start time
+        # so there should be a few other fields:
 
 class CraneTrack():
-    def __init__(self, tank_unmber):
-        self.tank_unmber = tank_unmber
+    def __init__(self, crane_index, tank_number):
+        self.crane_index = crane_index
+        self.tank_number = tank_number
+
+class CraneOperation():
+    def __init__(self, crane_index, tank_number, next_tank_number, rack_index):
+        self.crane_index = crane_index
+        self.tank_number = tank_number
+        self.next_tank_number = next_tank_number
+        self.rack_index = rack_index
 
 class TankAutomatorView(APIView):
 
+    tank_cross_time = 0.05
+
     def calculate_tank_shift_time(self, tank_a_number, tank_b_number):
         crossing_tank_qty = tank_b_number - tank_a_number
-        time_for_crossing_mins = crossing_tank_qty * 0.05
+        time_for_crossing_mins = crossing_tank_qty * self.tank_cross_time
         return abs(time_for_crossing_mins)
 
     rack_pick_time_mins = 0.07
     rack_drop_time_mins = 0.07
-    racks = []
     tanks = Tank.objects.all()
-    crane = CraneTrack(1)
     # the one added first will be the one most forward
 
     def find_next_tank(self, tank_a):
@@ -57,96 +78,208 @@ class TankAutomatorView(APIView):
         total_time = self.calculate_tank_shift_time(tank_a.tank_number, tank_b.tank_number) + 2*self.rack_pick_time_mins + 2*self.rack_drop_time_mins
         return total_time
 
-    def get_min_time_left_rack(self, racks):
-        min_time_left_rack = min(racks,key=attrgetter('remaining_tank_time'))
-        return min_time_left_rack
+    def get_min_time_left_racks(self, racks):
+        min_time_left_racks = racks.sort(key=lambda rack: rack.remaining_tank_time)
+        return min_time_left_racks
+
+    def get_sorted_cranes(self, cranes):
+        min_time_left_racks = cranes.sort(key=lambda crane: crane.tank_number)
+        return min_time_left_racks
+
+    def get_closest_crane(self, cranes, rack):
+        sorted_cranes = self.get_sorted_cranes(cranes)
+        no_of_cranes = len(sorted_cranes)
+        if no_of_cranes == 1 or rack.tank_number < sorted_cranes[0].tank_number:
+            return sorted_cranes[0].crane_index
+        if rack.tank_number > sorted_cranes[no_of_cranes - 1].tank_number:
+            return sorted_cranes[no_of_cranes - 1].crane_index
+
+        i = 0
+        while i + 1 < no_of_cranes:
+            crane_1 = sorted_cranes[i]
+            crane_2 = sorted_cranes[i+1]
+            crane_1_tankNumber = crane_1.tank_number
+            crane_2_tankNumber = crane_2.tank_number
+            rack_tankNumber = rack.tank_number
+            is_between = crane_1_tankNumber <= rack_tankNumber <= crane_2_tankNumber
+            if is_between: 
+                if rack_tankNumber - crane_1_tankNumber < crane_2_tankNumber - rack_tankNumber:
+                    return crane_1.crane_index
+                else:
+                    return crane_2.crane_index
+
+    def check_shift_operations_new_tank(self,current_rack, new_rack, myTanks, myCranes):
+        current_rack_index = current_rack.rack_index
+        current_tank = myTanks.get(tank_number = current_rack.tank_number)
+        current_next_tank = self.find_next_tank(current_tank)
+        mins_available_current_rack = current_rack.remaining_tank_time
+
+        new_tank = myTanks.get(tank_number = new_rack.tank_number)
+        mins_available_new_rack = new_rack.remaining_tank_time
+
+        myCraneIndex = self.get_closest_crane(myCranes, new_rack)
+
+        time_taken_to_get_crane_to_new_tank = self.calculate_tank_shift_time(myCranes[myCraneIndex].tank_number, new_tank.tank_number) + self.tank_cross_time
+
+        time_available_for_current_rack_after_getting_crane_to_new_tank = mins_available_current_rack - time_taken_to_get_crane_to_new_tank
+        
+        if time_available_for_current_rack_after_getting_crane_to_new_tank < 0:
+            return {'result_id': 0,}
+        # what of the crane shift time????
+        time_taken_for_shifting_new_rack = self.calc_rack_shift_time(current_tank) + time_taken_to_get_crane_to_new_tank
+        time_left_for_current_rack_after_shifting_new_rack = mins_available_current_rack - (mins_available_new_rack + self.calc_rack_shift_time(current_tank) + time_taken_to_get_crane_to_new_tank)
+        if time_left_for_current_rack_after_shifting_new_rack < 0:
+            return {'result_id': 0,}
+
+        return {'result_id': 1, 'time_taken_for_shifting_new_rack': time_taken_for_shifting_new_rack, 'myCraneIndex': myCraneIndex}
 
 
-    def calculate_racks_and_cranes(self):
+    def check_shift_operations(self,sortedRacks, myTanks, myCranes):
+        current_rack = sortedRacks[0]
+        current_rack_index = current_rack.rack_index
+        current_tank = myTanks.get(tank_number = current_rack.tank_number)
+        current_next_tank = self.find_next_tank(current_tank)
+        mins_available_current_rack = current_rack.remaining_tank_time
+
+        other_rack = sortedRacks[1]
+        other_tank = myTanks.get(tank_number = other_rack.tank_number)
+        mins_available_other_rack = other_rack.remaining_tank_time
+
+        myCraneIndex = self.get_closest_crane(myCranes, current_rack)
+
+        time_taken_to_get_crane_to_current_tank = self.calculate_tank_shift_time(myCranes[myCraneIndex].tank_number, current_tank.tank_number)
+
+        time_available_for_current_rack_after_getting_crane_to_current_tank = mins_available_current_rack - time_taken_to_get_crane_to_current_tank
+        
+        if time_available_for_current_rack_after_getting_crane_to_current_tank < 0:
+            return {'result_id': 0,}
+            
+        time_left_for_other_rack_after_shifting_current_rack = mins_available_other_rack - ((mins_available_current_rack - time_taken_to_get_crane_to_current_tank) + self.calc_rack_shift_time(current_tank) + self.calculate_tank_shift_time(current_next_tank.tank_number, other_tank.tank_number))
+        if time_left_for_other_rack_after_shifting_current_rack < 0:
+            return {'result_id': 0,}
+
+        return {'result_id': 1, 'time_taken_to_get_crane_to_current_tank': time_taken_to_get_crane_to_current_tank, 'current_tank': current_tank, 'current_rack_index': current_rack_index, 'current_next_tank': current_next_tank, 'myCraneIndex': myCraneIndex}
+
+    def perform_shift_operations(self,sortedRacks, myRacks, myTanks, myCranes):
+        ops_resultCheck_map = self.check_shift_operations(self,sortedRacks, myTanks, myCranes)
+        if ops_resultCheck_map['result_id'] !=0:
+            time_taken_to_get_crane_to_current_tank = ops_resultCheck_map['time_taken_to_get_crane_to_current_tank']
+            current_tank = ops_resultCheck_map['current_tank']
+            current_rack_index = ops_resultCheck_map['current_rack_index']
+            current_next_tank = ops_resultCheck_map['current_next_tank']
+            myCraneIndex = ops_resultCheck_map['myCraneIndex']
+            crane_old_tank_number = myCranes[myCraneIndex].tank_number
+
+            time_taken_to_shift_current_rack = time_taken_to_get_crane_to_current_tank + self.calc_rack_shift_time(current_tank)
+            for rack in myRacks:
+                rack.remaining_tank_time = rack.remaining_tank_time - time_taken_to_shift_current_rack
+
+            old_tank_number = myRacks[current_rack_index].tank_number
+            myRacks[current_rack_index].tank_number = current_next_tank.tank_number
+
+            old_remaining_time = myRacks[current_rack_index].remaining_tank_time
+            myRacks[current_rack_index].remaining_tank_time = current_next_tank.immersion_time_mins - self.rack_pick_time_mins
+            
+            myCranes[myCraneIndex].tank_number = current_next_tank.tank_number
+            result_n = self.calculate_racks_and_cranes(myRacks, myCranes)
+            if result_n != 1:
+                result_map = {'result_id': -1, 'current_rack_index': current_rack_index, 'time_taken_to_shift_current_rack': time_taken_to_shift_current_rack, 'old_tank_Number': old_tank_number, 'old_remaining_time': old_remaining_time, 'crane_index': myCraneIndex, 'crane_old_tank_number': crane_old_tank_number}
+            else:
+                result_map = {'result_id': 1, 'current_rack_index': current_rack_index,  'time_taken_to_shift_current_rack': time_taken_to_shift_current_rack, 'old_tank_Number': old_tank_number, 'old_remaining_time': old_remaining_time, 'crane_index': myCraneIndex, 'crane_old_tank_number': crane_old_tank_number}
+
+            return result_map
+        else:
+            return {'result_id': 0}
+
+    def deUpdateTimesAndPositions(self, result_map, myRacks, myCranes):
+        for rack in myRacks:
+            rack.remaining_tank_time = rack.remaining_tank_time + result_map['time_taken_to_shift_current_rack']
+        myRacks[result_map['current_rack_index']].tank_number = result_map['old_tank_Number']
+        myRacks[result_map['current_rack_index']].remaining_tank_time = result_map['old_remaining_time']
+        myCranes[result_map['crane_index']].tank_number = result_map['crane_old_tank_number']
+
+        return myRacks
+
+    # jus check if it is in the first tank, if yes, then you can perform in the shift ops
+    # if it is not added at the tank start, the i'll have to reupdate the rack_remaining times in the for loop, and see if it is possible all over again
+    # but what is the crane time to shift first rack to first tank
+    # i need to shift the crane to the first tank, it is separate from the other tank, current tank shiz
+    # also, i donot need to get the closest crane, i know that its crane zero
+    def calculate_racks_and_cranes(self, myRacks, myCranes):
+
         myTanks = self.tanks
         tanks_list = list(myTanks)
         no_of_tanks = len(tanks_list)
 
-        no_of_racks = len(self.racks)
-        the_rack_index = no_of_racks
-        self.racks[the_rack_index] = RackTrack(0, tanks_list[0].immersion_time_mins, 0)
 
-        myRacks = self.racks
+        no_of_racks = len(myRacks)
 
-        current_rack = myRacks[the_rack_index]
-        current_rack_index = current_rack.rack_index
-        current_tank = myTanks[0]
-        current_next_tank = self.find_next_tank(current_tank)
+        if no_of_racks != 0:
+            new_rack_index = no_of_racks
+            first_tank = myTanks.get(tank_number = 1)
+            new_rack = myRacks[new_rack_index] = RackTrack(new_rack_index, 1, (first_tank.immersion_time_mins - self.rack_pick_time_mins), -1, -1, -1)
+            new_next_tank = self.find_next_tank(first_tank)
+            new_rack.tank_number = new_next_tank.tank_number
+            new_rack.remaining_tank_time = new_next_tank.immersion_time_mins - self.rack_pick_time_mins
+            myRacks[new_rack_index] = new_rack
+            myCraneIndex = self.get_closest_crane(myCranes, new_rack)
+            myCranes[myCraneIndex].tank_number = new_next_tank.tank_number
+            result_id = self.calculate_racks_and_cranes(myRacks, myCranes)
 
-        total_rack_travel_time = 0.19
-
-        mins_available_current_rack = current_rack.remaining_tank_time
-        other_rack = self.get_min_time_left_rack(myRacks)
-        other_rack_index = other_rack.rack_index
-        other_tank = myTanks.get(tank_number = other_rack.tank_unmber)
-        other_next_tank = self.find_next_tank(other_tank)
-
-        mins_available_other_rack = other_rack.remaining_tank_time
-        time_taken_to_get_crane_to_other_tank = self.calculate_tank_shift_time(self.crane.tank_unmber, other_tank.tank_number)
-        time_available_for_other_rack_after_getting_crane_to_other_tank = mins_available_other_rack - time_taken_to_get_crane_to_other_tank
-        
-        if time_available_for_other_rack_after_getting_crane_to_other_tank < 0:
-            return False
-
-        time_available_for_current_rack_after_getting_to_other_tank = mins_available_current_rack - time_taken_to_get_crane_to_other_tank
-        time_left_for_current_rack_after_shifting_other_rack = time_available_for_current_rack_after_getting_to_other_tank - (time_available_for_other_rack_after_getting_crane_to_other_tank + self.calc_rack_shift_time(other_tank) + self.calculate_tank_shift_time(other_next_tank.tank_number, current_tank.tank_number))
-
-        time_taken_to_get_crane_to_current_tank = self.calculate_tank_shift_time(self.crane.tank_unmber, current_tank.tank_number)
-        time_taken_to_shift_current_rack = time_taken_to_get_crane_to_current_tank + self.calc_rack_shift_time(current_tank)
-        time_left_for_other_rack_after_shifting_current_rack = mins_available_other_rack - (time_taken_to_shift_current_rack + self.calculate_tank_shift_time(current_next_tank.tank_number, other_tank.tank_number))
-
-        if time_left_for_current_rack_after_shifting_other_rack < 0:
+            # if it is getting false at the last tank, then i have achieved my purpose
+            # what about the initial time
+            while result_id !=1:
+                firstRack = myRacks[0]
+                first_rack_tankNumber = firstRack.tank_number
+                the_tank = myTanks.get(tank_number = first_rack_tankNumber)
+                the_next_tank = self.find_next_tank(the_tank)
+                firstRack.tank_number = the_next_tank.tank_number
+                firstRack.remaining_tank_time = the_next_tank.immersion_time_mins - self.rack_pick_time_mins
+                myRacks[0] = firstRack
+                myCraneIndex = self.get_closest_crane(myCranes, firstRack)
+                myCranes[myCraneIndex].tank_number = the_next_tank.tank_number
+                result_id = self.calculate_racks_and_cranes(myRacks, myCranes)
             
-            if time_left_for_other_rack_after_shifting_current_rack < 0:
-                return False
-            else: # shift current tank first
-                self.crane.tank_unmber = current_tank.tank_number
-                for rack in self.racks:
-                    rack.remaining_tank_time = rack.remaining_tank_time - time_taken_to_shift_current_rack
-                self.racks[current_rack_index].tank_unmber = current_next_tank.tank_number
-                self.racks[current_rack_index].remaining_tank_time = current_next_tank.immersion_time_mins - self.rack_pick_time_mins
-                result = self.calculate_racks_and_cranes()
-                return result
+            return result_id
+            # last case scenario, I will just shift the first tank forward
+
+        # first lets try this process by adding a new rack
+
         else:
-            time_taken_to_shift_other_rack = time_taken_to_get_crane_to_other_tank + self.calc_rack_shift_time(other_tank)
 
-            if time_left_for_other_rack_after_shifting_current_rack < 0:
-                for rack in self.racks:
-                    rack.remaining_tank_time = rack.remaining_tank_time - time_taken_to_shift_other_rack
-                self.racks[other_rack_index].tank_unmber = other_next_tank.tank_number
-                self.racks[other_rack_index].remaining_tank_time = other_next_tank.immersion_time_mins - self.rack_pick_time_mins
-                result = self.calculate_racks_and_cranes()
-            else: # shift current tank first
-                self.crane.tank_unmber = current_tank.tank_number
-                for rack in self.racks:
-                    rack.remaining_tank_time = rack.remaining_tank_time - time_taken_to_shift_current_rack
-                self.racks[current_rack_index].tank_unmber = current_next_tank.tank_number
-                self.racks[current_rack_index].remaining_tank_time = current_next_tank.immersion_time_mins - self.rack_pick_time_mins
-                result = self.calculate_racks_and_cranes()
-                if not result:
-                    for rack in self.racks:
-                        rack.remaining_tank_time = rack.remaining_tank_time - time_taken_to_shift_other_rack
-                    self.racks[other_rack_index].tank_unmber = other_next_tank.tank_number
-                    self.racks[other_rack_index].remaining_tank_time = other_next_tank.immersion_time_mins - self.rack_pick_time_mins
-                    result = self.calculate_racks_and_cranes()
-                return result
+            myMinRacks = self.get_min_time_left_racks(myRacks)
+
+            current_rack = myMinRacks[0]
+
+            new_rack_index = no_of_racks
+            first_tank = myTanks.get(tank_number = 1)
+            line_entry_added_time_available = 0
+            #
+            myRacks[new_rack_index] = RackTrack(new_rack_index, 1, (first_tank.immersion_time_mins - self.rack_pick_time_mins), current_rack.tank_number, current_rack.remaining_tank_time, line_entry_added_time_available)
+            # i need to check if crane 0 can even perform this operation at this stage. this process will have its own update and deupdate stages,
+            # I should split the shift op function:
+            # i mean if it cant even add it, then i shouldnt even add the rack
+            new_result = self.check_shift_operations_new_tank(current_rack, myRacks[new_rack_index], myTanks, myCranes)
+            if new_result['result_id'] == 0:
+                del myRacks[new_rack_index]
+            else:
+                # update the times and the crane positions
+                # put a flag here to further deupdate
+                pass
+
+            sortedRacks = self.get_min_time_left_racks(myRacks)
+
+            result_map = self.perform_shift_operations(sortedRacks, myRacks, myTanks, myCranes)
+
+            if result_map['result_id'] != 1:
+                
+                myRacks = self.deUpdateTimesAndPositions(result_map, myRacks, myCranes)
+                sortedRacks = self.get_min_time_left_racks(myRacks)
+                result_map = self.perform_shift_operations(sortedRacks, myRacks, myTanks, myCranes)
+            # it needs to be a for loop
             
-            # go with 
-
-
-        total_rack_travel_time = total_rack_travel_time + self.calc_rack_shift_time(current_tank)
-        if current_tank.tank_number == no_of_tanks - 1:
-            return
-        current_tank = self.find_next_tank(current_tank)
-
-        total_rack_travel_time = total_rack_travel_time + 0.19
-        return total_rack_travel_time
-
+            return result_map['result_id']
+            
 
     def post(self, request, *args, **kwargs):
         tanks = list(Tank.objects.all())
