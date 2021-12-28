@@ -1,4 +1,6 @@
 from django.db import models
+import json
+from json import JSONEncoder
 
 class Tank(models.Model):
     tank_number = models.IntegerField(default=0)
@@ -14,3 +16,10 @@ class Tank(models.Model):
     class Meta:
         ordering = ['tank_number']
         verbose_name_plural = "             1. tanks"
+
+class ElectroEncoder(JSONEncoder):
+        def default(self, o):
+            return o.__dict__
+
+
+
