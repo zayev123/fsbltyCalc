@@ -35,6 +35,7 @@ class CraneOperation():
 class TankAutomatorView(APIView):
 
     tank_cross_time = 0.05
+    final_racks_list = []
 
     def calculate_tank_shift_time(self, tank_a_number, tank_b_number):
         crossing_tank_qty = tank_b_number - tank_a_number
@@ -188,6 +189,7 @@ class TankAutomatorView(APIView):
         if current_tank.tank_number == len(myTanks):
             time_left_for_other_rack_after_shifting_current_rack = mins_available_other_rack - ((mins_available_current_rack - time_taken_to_get_crane_to_current_tank) + self.calc_rack_shift_time(current_tank, sortedRacks) + self.calculate_tank_shift_time(current_tank.tank_number, other_tank.tank_number) + 2*self.tank_cross_time)
             if time_left_for_other_rack_after_shifting_current_rack >= 0:
+                self.final_racks_list = sortedRacks
                 return {'result_id': 2}
         current_next_tank = self.find_next_tank(current_tank, sortedRacks)
 
@@ -312,6 +314,7 @@ class TankAutomatorView(APIView):
                             for rack in myRacks:
                                 rack.remaining_tank_time = rack.remaining_tank_time - new_result['current_rack_time_shift_needed']
                             myRacks[new_rack_index].entry_moment_shift_time_available = myRacks[new_rack_index].entry_moment_shift_time_available - new_result['current_rack_time_shift_needed']
+                            myRacks[new_rack_index].entry_moment_min_time_rack_remainingTimeAvailable = myRacks[new_rack_index].entry_moment_min_time_rack_remainingTimeAvailable - new_result['current_rack_time_shift_needed']
                             myRacks[new_rack_index].remaining_tank_time = myTanks.get(tank_number = myRacks[new_rack_index].tank_number).immersion_time_mins - self.rack_pick_time_mins
                             sortedRacks = self.get_min_time_left_racks(myRacks)
                             # if it is not a success, then try without the new_rack
@@ -343,7 +346,11 @@ class TankAutomatorView(APIView):
             
 
     def post(self, request, *args, **kwargs):
-        tanks = list(Tank.objects.all())
-        number_of_cranes = 1
-        e =self.ca
-        pass
+        e_cranes = []
+        e_cranes.append(CraneTrack(0, 1))
+        e_racks = []
+        e_result = self.calculate_racks_and_cranes(e_racks, e_cranes)
+        print(e_result)
+        print(self.final_racks_list)
+
+        return Response({'message': 'success,'})
