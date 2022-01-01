@@ -10,6 +10,9 @@ final_racks_list = []
 
 rack_pick_time_mins = 0.2
 rack_drop_time_mins = 0.2
+rackless_pick_time_mins = 0.14
+rackless_drop_time_mins = 0.14
+
 tanks = Tank.objects.all()
 crane_1_tanks = tanks
 crane_2_start_tank_number = 15
@@ -70,7 +73,7 @@ def find_next_tank(tank_a, z_racks):
     myTanks = tanks
     tank_a_number = tank_a.tank_number
     i = 1
-    while i < 5:
+    while i < 6:
         tank_b_number = tank_a_number + i
         tank_b = myTanks.get(tank_number = tank_b_number)
         if tank_b_number >= 56:

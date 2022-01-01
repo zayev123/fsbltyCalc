@@ -2,7 +2,7 @@ import json
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from electroplating_automation.tank_functions import CraneOperation, CraneTrack, RackTrack, calc_operation_time, calc_rack_shift_time, calculate_tank_shift_time, find_next_tank, get_closest_crane, get_min_time_left_racks, crane_1_tanks, rack_drop_time_mins, tank_cross_time, rack_pick_time_mins
+from electroplating_automation.tank_functions import CraneOperation, CraneTrack, RackTrack, calc_operation_time, calc_rack_shift_time, calculate_tank_shift_time, find_next_tank, get_closest_crane, get_min_time_left_racks, crane_1_tanks, rack_drop_time_mins, tank_cross_time, rack_pick_time_mins, rackless_pick_time_mins, rackless_drop_time_mins
 from .models import ElectroEncoder, Tank
 import copy
 # now to set the aded times available option
@@ -32,11 +32,11 @@ class TankAutomatorView(APIView):
         new_tank = myTanks.get(tank_number = new_rack.tank_number)
 
 
-        time_taken_to_get_crane_to_new_tank =rack_pick_time_mins + calculate_tank_shift_time(myFirstCrane.tank_number, new_tank.tank_number) + tank_cross_time + rack_drop_time_mins
+        time_taken_to_get_crane_to_new_tank =rackless_pick_time_mins + calculate_tank_shift_time(myFirstCrane.tank_number, new_tank.tank_number) + tank_cross_time + rackless_drop_time_mins
 
         
         time_taken_for_shifting_new_rack = time_taken_to_get_crane_to_new_tank + rack_pick_time_mins + tank_cross_time + rack_drop_time_mins
-        time_left_for_current_rack_after_shifting_new_rack = mins_available_current_rack - time_taken_for_shifting_new_rack - rack_pick_time_mins - calculate_tank_shift_time(new_tank.tank_number, current_tank.tank_number) - rack_drop_time_mins
+        time_left_for_current_rack_after_shifting_new_rack = mins_available_current_rack - time_taken_for_shifting_new_rack - rackless_pick_time_mins - calculate_tank_shift_time(new_tank.tank_number, current_tank.tank_number) - rackless_drop_time_mins
         if time_left_for_current_rack_after_shifting_new_rack < 0:
             return {'result_id': 0,}
 
@@ -92,7 +92,7 @@ class TankAutomatorView(APIView):
         if myCranes[myCraneIndex].tank_number == current_tank.tank_number:
             time_taken_to_get_crane_to_current_tank = 0
         else:
-            time_taken_to_get_crane_to_current_tank = rack_pick_time_mins + calculate_tank_shift_time(myCranes[myCraneIndex].tank_number, current_tank.tank_number) + rack_drop_time_mins
+            time_taken_to_get_crane_to_current_tank = rackless_pick_time_mins + calculate_tank_shift_time(myCranes[myCraneIndex].tank_number, current_tank.tank_number) + rackless_drop_time_mins
 
         time_available_for_current_rack_after_getting_crane_to_current_tank = mins_available_current_rack - time_taken_to_get_crane_to_current_tank
         
@@ -114,10 +114,10 @@ class TankAutomatorView(APIView):
             if rack.tank_number == current_next_tank.tank_number:
                 z_tank = myTanks.get(tank_number = rack.tank_number)
                 z_next_tank = find_next_tank(z_tank, myRacks)
-                current_rack_time_shift_needed = (rack.remaining_tank_time + calc_rack_shift_time(z_tank, myRacks) + rack_pick_time_mins + calculate_tank_shift_time(z_next_tank.tank_number, current_tank.tank_number) + rack_drop_time_mins) - current_rack.remaining_tank_time
+                current_rack_time_shift_needed = (rack.remaining_tank_time + calc_rack_shift_time(z_tank, myRacks) + rackless_pick_time_mins + calculate_tank_shift_time(z_next_tank.tank_number, current_tank.tank_number) + rackless_drop_time_mins) - current_rack.remaining_tank_time
                 return {'result_id': 0, 'current_rack_time_shift_needed': current_rack_time_shift_needed, 'current_rack_index': current_rack_index}
             # rack drop time is part of the available time in many cases
-        time_left_for_other_rack_after_shifting_current_rack = mins_available_other_rack - ((mins_available_current_rack) + calc_rack_shift_time(current_tank, myRacks) + rack_pick_time_mins + calculate_tank_shift_time(current_next_tank.tank_number, other_tank.tank_number) + rack_drop_time_mins)
+        time_left_for_other_rack_after_shifting_current_rack = mins_available_other_rack - ((mins_available_current_rack) + calc_rack_shift_time(current_tank, myRacks) + rackless_pick_time_mins + calculate_tank_shift_time(current_next_tank.tank_number, other_tank.tank_number) + rackless_drop_time_mins)
         if time_left_for_other_rack_after_shifting_current_rack < 0:
             return {'result_id': 0, 'time_left_for_other_rack_after_shifting_current_rack': time_left_for_other_rack_after_shifting_current_rack}
 
@@ -130,7 +130,6 @@ class TankAutomatorView(APIView):
             self.final_racks_list = myRacks
             return {'result_id': 2}
         if ops_resultCheck_map['result_id'] ==1:
-            time_taken_to_get_crane_to_current_tank = ops_resultCheck_map['time_taken_to_get_crane_to_current_tank']
             current_tank = ops_resultCheck_map['current_tank']
             current_rack_index = ops_resultCheck_map['current_rack_index']
             current_next_tank = ops_resultCheck_map['current_next_tank']
@@ -225,7 +224,7 @@ class TankAutomatorView(APIView):
                 new_rack_index = no_of_racks
                 first_tank = myTanks.get(tank_number = 1)
 
-                entry_moment_shift_time_available = current_rack.remaining_tank_time - (rack_pick_time_mins + calculate_tank_shift_time(myCranes[0].tank_number, 1) + tank_cross_time + rack_drop_time_mins + rack_pick_time_mins + tank_cross_time + rack_drop_time_mins + calculate_tank_shift_time(1, current_rack.tank_number))
+                entry_moment_shift_time_available = current_rack.remaining_tank_time - (rackless_pick_time_mins + calculate_tank_shift_time(myCranes[0].tank_number, 1) + tank_cross_time + rackless_drop_time_mins + rack_pick_time_mins + tank_cross_time + rack_drop_time_mins + rackless_pick_time_mins + calculate_tank_shift_time(1, current_rack.tank_number))
                 if entry_moment_shift_time_available >= 0:
                     entry_moment_shift_time_available_store = entry_moment_shift_time_available
                     entry_moment_next_rack_number = no_of_racks - 1
@@ -307,10 +306,11 @@ class TankAutomatorView(APIView):
         rackJSON = json.loads(rackJSONData)
         craneJSONData = json.dumps(self.crane_ops, indent=4, cls=ElectroEncoder)
         craneJSON = json.loads(craneJSONData)
-        print(rack_pick_time_mins + tank_cross_time + rack_drop_time_mins + calc_operation_time(1,15, crane_1_tanks) + rack_pick_time_mins + calculate_tank_shift_time(15, 1) + tank_cross_time + rack_drop_time_mins)
-        print(1.1 + rack_pick_time_mins + tank_cross_time + rack_drop_time_mins + calc_operation_time(6,15, crane_1_tanks))
+        print(rack_pick_time_mins + tank_cross_time + rack_drop_time_mins + calc_operation_time(1,15, crane_1_tanks) + rackless_pick_time_mins + calculate_tank_shift_time(15, 1) + tank_cross_time + rackless_drop_time_mins)
+        print(0.98 + rack_pick_time_mins + tank_cross_time + rack_drop_time_mins + calc_operation_time(6,15, crane_1_tanks))
         # No, it doesnt matter, its part of the remaining time
-        print(calc_operation_time(15,23, crane_1_tanks) + rack_pick_time_mins + calculate_tank_shift_time(23, 15) + rack_drop_time_mins)
+        print(calc_operation_time(15,23, crane_1_tanks) + rackless_pick_time_mins + calculate_tank_shift_time(23, 15) + rackless_drop_time_mins)
+        
         return Response({'message': 'success', 'rackJSON': rackJSON, 'check_data': self.check_data, 'crane_data': craneJSON})
 
     def serialize_racks(self, myracks):
