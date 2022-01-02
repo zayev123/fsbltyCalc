@@ -16,6 +16,7 @@ rackless_drop_time_mins = 0.14
 tanks = Tank.objects.all()
 crane_1_tanks = tanks
 crane_2_start_tank_number = 15
+crane_2_end_tank_number = 35
 crane_2_tanks = tanks.filter(tank_number__gte=crane_2_start_tank_number)
 
 
@@ -73,7 +74,7 @@ def find_next_tank(tank_a, z_racks):
     myTanks = tanks
     tank_a_number = tank_a.tank_number
     i = 1
-    while i < 6:
+    while i < 8:
         tank_b_number = tank_a_number + i
         tank_b = myTanks.get(tank_number = tank_b_number)
         if tank_b_number >= 56:
@@ -83,7 +84,7 @@ def find_next_tank(tank_a, z_racks):
             j = 0
             the_tanks = [tank_b]
             tank_x_number = tank_b_number
-            while j<5:
+            while j<8:
                 tank_x_number = tank_x_number +1
                 tank_x = myTanks.get(tank_number = tank_x_number)
                 if tank_x.tank_type_number == tank_b.tank_type_number:
@@ -96,33 +97,35 @@ def find_next_tank(tank_a, z_racks):
     return -1
 
     # after finding next tank, it will do +1, +1 till it finds an empty tank of the same type number
-
-def find_next_tank_general(tank_a):
-    myTanks = tanks
-    tank_a_number = tank_a.tank_number
-    i = 1
-    while i < 5:
-        tank_b_number = tank_a_number + i
-        tank_b = myTanks.get(tank_number = tank_b_number)
-        if tank_b.tank_type_number != tank_a.tank_type_number:
-            best_tank = tank_b
-            return best_tank
-    return -1
-
 def calc_rack_shift_time(tank_a, z_racks):
     tank_b = find_next_tank(tank_a, z_racks)
     total_time = calculate_tank_shift_time(tank_a.tank_number, tank_b.tank_number) + rack_pick_time_mins + rack_drop_time_mins
     return total_time
 
-def calc_operation_time(first_tank_number, last_tank_number, myTanks):
-    tanks_list = list(myTanks.filter(Q(tank_number__gte=first_tank_number) & Q(tank_number__lte=last_tank_number)))
-    op_time = 0
-    for tank in tanks_list:
-        if tank.tank_number == last_tank_number:
-            break
-        next_tank = find_next_tank_general(tank)
-        op_time = op_time + float(tank.immersion_time_mins) + calc_rack_shift_time(tank, next_tank)
-    return op_time
+def find_next_tank_general(tank_a):
+    myTanks = tanks
+    tank_a_number = tank_a.tank_number
+    i = 1
+    while i < 8:
+        tank_b_number = tank_a_number + i
+        tank_b = myTanks.get(tank_number = tank_b_number)
+        if tank_b.tank_type_number != tank_a.tank_type_number:
+            best_tank = tank_b
+            return best_tank
+        i = i+1
+    return -1
+
+def calc_rack_shift_time_general(tank_a, tank_b):
+    total_time = rack_pick_time_mins + calculate_tank_shift_time(tank_a.tank_number, tank_b.tank_number) + rack_drop_time_mins
+    return total_time
+
+def calc_operation_time(first_tank, last_tank_number, myTanks, op_time):
+    next_tank = find_next_tank_general(first_tank)
+    op_time = op_time + float(first_tank.immersion_time_mins) + calc_rack_shift_time_general(first_tank, next_tank)
+    if next_tank.tank_number == last_tank_number:
+        return op_time
+    my_op_time = calc_operation_time(next_tank, last_tank_number, myTanks, op_time)
+    return my_op_time
 
 
 

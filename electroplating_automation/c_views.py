@@ -2,7 +2,7 @@ import json
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from electroplating_automation.tank_functions import CraneOperation, CraneTrack, RackTrack, calc_operation_time, calc_rack_shift_time, calculate_tank_shift_time, find_next_tank, get_closest_crane, get_min_time_left_racks, rack_drop_time_mins, crane_2_tanks, crane_2_start_tank_number, rackless_pick_time_mins, rackless_drop_time_mins
+from electroplating_automation.tank_functions import CraneOperation, CraneTrack, RackTrack, calc_operation_time, calc_rack_shift_time, calculate_tank_shift_time, find_next_tank, get_closest_crane, get_min_time_left_racks, rack_drop_time_mins, crane_2_tanks, crane_2_start_tank_number, rackless_pick_time_mins, rackless_drop_time_mins, crane_2_end_tank_number
 from .models import ElectroEncoder, Tank
 import copy
 # now to set the aded times available option
@@ -176,25 +176,36 @@ class CraneTwoView(APIView):
     def get(self, request, *args, **kwargs):
         self.mycranes.append(self.first_crane)
         self.myracks.append(self.first_rack)
-        is_continue = True
         i = 0
-        while i < 70:
-            if self.myracks[0].tank_number == list(crane_2_tanks)[len(list(crane_2_tanks)) - 1].tank_number:
-                self.final_racks_list = self.myracks
-                is_continue = False
-                break
+        batch_cycle_number = 4
+        while i <= batch_cycle_number:
+            if self.myracks[0].tank_number == crane_2_end_tank_number:
+                #break
+                i = i+1
+                if i == batch_cycle_number:
+                    break
+                del self.myracks[0]
+                for x_rack in self.myracks:
+                    x_rack.rack_index = x_rack.rack_index - 1
             z_result = self.check_cycle_completion()
             if z_result['result_id'] == 0:
-                is_continue = False
                 break
-            i = i+1
         #rackJSONData = json.dumps(self.final_racks_list, indent=4, cls=ElectroEncoder)
         #rackJSON = json.loads(rackJSONData)
         craneJSONData = json.dumps(self.crane_ops, indent=4, cls=ElectroEncoder)
         craneJSON = json.loads(craneJSONData)
-        #print(calc_operation_time(1,14, crane_2_tanks) + 0.17*2 + 0.07*2 + 0.07*15)
-        #print(0.98 + calc_operation_time(6,14, crane_2_tanks) + 0.17 + 0.07)
-        #print(calc_operation_time(14,19, crane_2_tanks) + 0.17 + 0.07)
+        first_tank_1 = crane_2_tanks.get(tank_number = crane_2_start_tank_number)
+        #'''
+        for f_rack in self.myracks:
+            if f_rack.tank_number != crane_2_end_tank_number:
+                f_tank = crane_2_tanks.get(tank_number = f_rack.tank_number)
+                f_next_tank = find_next_tank(f_tank, self.myracks)
+                if f_next_tank.tank_number == crane_2_end_tank_number:
+                    time_to_finnish = f_rack.remaining_tank_time + calc_rack_shift_time(f_tank, self.myracks)
+                else:
+                    time_to_finnish = f_rack.remaining_tank_time + calc_rack_shift_time(f_tank, self.myracks) + calc_operation_time(f_next_tank, crane_2_end_tank_number, crane_2_tanks, 0)
+                print(time_to_finnish)
+        #'''
         return Response({'message': 'success', 'rackJSON': 'rackJSON', 'check_data': self.check_data, 'crane_data': craneJSON})
 
     def serialize_racks(self, myracks):
