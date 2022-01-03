@@ -16,8 +16,14 @@ rackless_drop_time_mins = 0.14
 tanks = Tank.objects.all()
 crane_1_tanks = tanks
 crane_2_start_tank_number = 15
-crane_2_end_tank_number = 35
+crane_2_end_tank_number = 37
 crane_2_tanks = tanks.filter(tank_number__gte=crane_2_start_tank_number)
+crane_3_start_tank_number = crane_2_end_tank_number
+crane_3_tanks = tanks.filter(tank_number__gte=crane_3_start_tank_number)
+crane_3_end_tank_number = 50
+crane_4_start_tank_number = crane_3_end_tank_number
+crane_4_tanks = tanks.filter(tank_number__gte=crane_4_start_tank_number)
+crane_4_end_tank_number = 61
 
 
 class RackTrack():
