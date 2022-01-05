@@ -61,8 +61,8 @@ class TankAutomatorView(APIView):
             myFirstCrane.tank_number = 1
             myCranes[0] = myFirstCrane
 
-            crane_op = CraneOperation(0, crane_old_tank_number, -1, 1, new_rack_index)
-            self.check_data.append({'shifted_rack_index': new_rack_index, 'crane_old_tank_number': 'base_station', 'next_tank_number': 1, 'crane_operation_time': time_taken_for_shifting_new_rack})
+            first_tank = crane_1_tanks.get(tank_number = 1)
+            self.check_data.append({'shifted_rack_index': new_rack_index, 'crane_old_tank_number': 'pick_up_station', 'tank_number': 1, 'tank': first_tank.process_name})
             self.check_data.append(self.serialize_electro(myRacks))
             self.check_data.append({'------': '-------------------------------------------------------------------------------------------'})
             temp_racks_3 = copy.deepcopy(myRacks)
@@ -146,7 +146,8 @@ class TankAutomatorView(APIView):
             myCranes[myCraneIndex].tank_number = current_next_tank.tank_number
             temp_racks_2 = copy.deepcopy(myRacks)
             temp_cranes_2 = copy.deepcopy(myCranes)
-            self.check_data.append({'shifted_rack_index': current_rack_index, 'crane_old_tank_number': crane_old_tank_number, 'next_tank_number': current_next_tank.tank_number, 'crane_operation_time': calc_rack_shift_time(current_tank, myRacks)})
+            next_tank = crane_1_tanks.get(tank_number = myRacks[current_rack_index].tank_number)
+            self.check_data.append({'shifted_rack_index': current_rack_index, 'crane_old_tank_number': crane_old_tank_number, 'next_tank_number': current_next_tank.tank_number, 'next_tank': next_tank.process_name})
             self.check_data.append(self.serialize_electro(myRacks))
             self.check_data.append({'------': '-------------------------------------------------------------------------------------------'})
             result_n = self.calculate_racks_and_cranes(temp_racks_2, temp_cranes_2)
@@ -181,7 +182,7 @@ class TankAutomatorView(APIView):
             first_tank = myTanks.get(tank_number = 1)
             new_rack = RackTrack(new_rack_index, 1, (float(first_tank.immersion_time_mins)), -1, -1, -1, -1)
             myRacks.append(new_rack)
-            self.check_data.append({'shifted_rack_index': new_rack.rack_index, 'crane_old_tank_number': 'base_station', 'next_tank_number': 1, 'crane_operation_time': rack_pick_time_mins + tank_cross_time + rack_drop_time_mins})
+            self.check_data.append({'shifted_rack_index': new_rack.rack_index, 'crane_old_tank_number': 'pick_up_station', 'tank_number': 1, 'first_tank': first_tank.process_name})
             self.check_data.append(self.serialize_electro(myRacks))
             self.check_data.append({'------': '-------------------------------------------------------------------------------------------'})
             new_next_tank = find_next_tank(first_tank, myRacks)
@@ -190,7 +191,7 @@ class TankAutomatorView(APIView):
             myRacks[new_rack_index] = new_rack
             myCraneIndex = get_closest_crane(myCranes, new_rack)
             myCranes[myCraneIndex].tank_number = new_next_tank.tank_number
-            self.check_data.append({'shifted_rack_index': new_rack.rack_index, 'crane_old_tank_number': first_tank.tank_number, 'next_tank_number': new_next_tank.tank_number, 'crane_operation_time': rack_pick_time_mins + tank_cross_time + rack_drop_time_mins})
+            self.check_data.append({'shifted_rack_index': new_rack.rack_index, 'crane_old_tank_number': first_tank.tank_number, 'next_tank_number': new_next_tank.tank_number, 'next_tank': new_next_tank.process_name})
             self.check_data.append(self.serialize_electro(myRacks))
             self.check_data.append({'------': '-------------------------------------------------------------------------------------------'})
             temp_racks_0 = copy.deepcopy(myRacks)
@@ -209,7 +210,7 @@ class TankAutomatorView(APIView):
                 myRacks[0] = firstRack
                 myCraneIndex = get_closest_crane(myCranes, firstRack)
                 myCranes[myCraneIndex].tank_number = the_next_tank.tank_number
-                self.check_data.append({'shifted_rack_index': firstRack.rack_index, 'crane_old_tank_number': first_rack_tankNumber, 'next_tank_number': the_next_tank.tank_number, 'crane_operation_time': rack_pick_time_mins + tank_cross_time + rack_drop_time_mins})
+                self.check_data.append({'shifted_rack_index': firstRack.rack_index, 'crane_old_tank_number': first_rack_tankNumber, 'next_tank_number': the_next_tank.tank_number, 'next_tank': the_next_tank.process_name})
                 self.check_data.append(self.serialize_electro(myRacks))
                 self.check_data.append({'------': '-------------------------------------------------------------------------------------------'})
                 temp_racks_1 = copy.deepcopy(myRacks)
@@ -249,7 +250,8 @@ class TankAutomatorView(APIView):
                     temp_cranes_2 = copy.deepcopy(myCranes)
                     #self.check_data.append({'shifted_rack_index': 'None', 'crane_old_tank_number': myCranes[0].tank_number, 'next_tank_number': 'None', 'crane_operation_time': 'None'})
                     #self.check_data.append(self.serialize_electro(myRacks))
-                    self.check_data.append({'shifted_rack_index': new_rack_index, 'crane_old_tank_number': 'base_station', 'next_tank_number': 1})
+                    next_tank = crane_1_tanks.get(tank_number = 1)
+                    self.check_data.append({'shifted_rack_index': new_rack_index, 'crane_old_tank_number': myCranes[0].tank_number, 'next_tank_number': 1, 'next_tank': next_tank.process_name})
                     self.check_data.append(self.serialize_electro(myRacks))
                     self.check_data.append({'------': '-------------------------------------------------------------------------------------------'})
                     new_result = self.perform_shift_operations_new_tank(temp_current_rack_2, temp_racks_2, temp_Tanks_2, temp_cranes_2)
@@ -279,9 +281,12 @@ class TankAutomatorView(APIView):
                             temp_racks_4 = copy.deepcopy(myRacks)
                             temp_Tanks_4 = myTanks
                             temp_cranes_4 = copy.deepcopy(myCranes)
-                            self.check_data.append({'shifted_rack_index': new_rack_index, 'crane_old_tank_number': 'base_station', 'next_tank_number': 1})
+                            first_tank = crane_1_tanks.get(tank_number = myRacks[new_rack_index].tank_number)
+                            #'next_tank': next_tank.process_name
+                            self.check_data.append({'shifted_rack_index': new_rack_index, 'crane_old_tank_number': myCranes[0].tank_number, 'tank_number': 1, 'first_tank': first_tank.process_name})
                             self.check_data.append(self.serialize_electro(myRacks))
                             self.check_data.append({'------': '-------------------------------------------------------------------------------------------'})
+                            temp_cranes_4[0].tank_number = 1
                             new_result = self.perform_shift_operations(sortedRacks_4, temp_racks_4, temp_Tanks_4, temp_cranes_4)
                             if new_result['result_id'] == 2:
                                 return new_result
@@ -329,7 +334,7 @@ class TankAutomatorView(APIView):
         cycle_y_time = 0.98 + rack_pick_time_mins + tank_cross_time + rack_drop_time_mins + calc_operation_time(other_tank, 15, crane_1_tanks, 0)
         # No, it doesnt matter, its part of the remaining time
         
-        return Response({'cycle_x_time': cycle_x_time, 'cycle_y_time': cycle_y_time, 'Data Flow': self.check_data,})
+        return Response({'rack_pick_time_mins': rack_pick_time_mins, 'rack_drop_time_mins': rack_drop_time_mins, 'rackless_pick_time_mins': rackless_pick_time_mins, 'rackless_drop_time_mins': rackless_drop_time_mins, 'tank_cross_time_mins': tank_cross_time, 'cycle_x_time': cycle_x_time, 'cycle_y_time': cycle_y_time, 'Data Flow': self.check_data,})
 
     def serialize_electro(self, myracks):
         rackJSONData = json.dumps(myracks, indent=4, cls=ElectroEncoder)

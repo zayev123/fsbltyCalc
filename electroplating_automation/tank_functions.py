@@ -16,14 +16,14 @@ rackless_drop_time_mins = 0.14
 tanks = Tank.objects.all()
 crane_1_tanks = tanks
 crane_2_start_tank_number = 15
-crane_2_end_tank_number = 37
 crane_2_tanks = tanks.filter(tank_number__gte=crane_2_start_tank_number)
-crane_3_start_tank_number = crane_2_end_tank_number
+crane_3_start_tank_number = 31
 crane_3_tanks = tanks.filter(tank_number__gte=crane_3_start_tank_number)
-crane_3_end_tank_number = 50
-crane_4_start_tank_number = crane_3_end_tank_number
+crane_4_start_tank_number = 43
 crane_4_tanks = tanks.filter(tank_number__gte=crane_4_start_tank_number)
-crane_4_end_tank_number = 61
+crane_5_start_tank_number = 52
+crane_5_tanks = tanks.filter(tank_number__gte=crane_5_start_tank_number)
+last_tank_number = 59
 
 
 class RackTrack():
@@ -82,6 +82,9 @@ def find_next_tank(tank_a, z_racks):
     i = 1
     while i < 8:
         tank_b_number = tank_a_number + i
+        if tank_b_number > last_tank_number:
+            best_tank = myTanks.get(tank_number = last_tank_number)
+            return best_tank
         tank_b = myTanks.get(tank_number = tank_b_number)
         if tank_b_number >= 56:
             best_tank = tank_b
